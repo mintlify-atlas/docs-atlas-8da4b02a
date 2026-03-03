@@ -1,0 +1,312 @@
+---
+title: Generate Wrapper
+description: Generate a new AI-powered wrapper for sustainability indicators
+---
+
+## POST /resources/wrappers/generate
+
+Generate a new AI-powered wrapper for sustainability indicators. The wrapper will be created asynchronously - the endpoint returns immediately with wrapper details, while code generation and execution happen in the background via a message queue.
+
+### Authentication
+
+This endpoint requires authentication. Include your API key in the request headers.
+
+### Request Body
+
+<ParamField body="source_type" type="string" required>
+  Type of data source. Must be one of:
+  - `API` - REST API endpoint
+  - `CSV` - CSV file
+  - `XLSX` - Excel file
+</ParamField>
+
+<ParamField body="source_config" type="object" required>
+  Source-specific configuration. The structure varies based on `source_type`.
+  
+  <Expandable title="CSV Source Config">
+    <ParamField body="file_id" type="string" required>
+      File ID of the uploaded CSV file
+    </ParamField>
+    <ParamField body="location" type="string">
+      Computed file path (automatically populated by backend)
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="XLSX Source Config">
+    <ParamField body="file_id" type="string" required>
+      File ID of the uploaded XLSX file
+    </ParamField>
+    <ParamField body="location" type="string">
+      Computed file path (automatically populated by backend)
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="API Source Config">
+    <ParamField body="location" type="string" required>
+      API endpoint URL
+    </ParamField>
+    <ParamField body="auth_type" type="string" default="none">
+      Authentication type: `bearer`, `api_key`, `basic`, or `none`
+    </ParamField>
+    <ParamField body="api_key" type="string">
+      API key for authentication (when auth_type is `api_key`)
+    </ParamField>
+    <ParamField body="api_key_header" type="string" default="X-API-Key">
+      Header name for API key
+    </ParamField>
+    <ParamField body="bearer_token" type="string">
+      Bearer token for authentication (when auth_type is `bearer`)
+    </ParamField>
+    <ParamField body="username" type="string">
+      Username for basic authentication
+    </ParamField>
+    <ParamField body="password" type="string">
+      Password for basic authentication
+    </ParamField>
+    <ParamField body="timeout_seconds" type="integer" default="30">
+      Request timeout in seconds
+    </ParamField>
+    <ParamField body="date_field" type="string">
+      Field name for date/timestamp in API response
+    </ParamField>
+    <ParamField body="value_field" type="string">
+      Field name for the indicator value in API response
+    </ParamField>
+    <ParamField body="custom_headers" type="object">
+      Additional custom headers as key-value pairs
+    </ParamField>
+    <ParamField body="query_params" type="object">
+      Default query parameters as key-value pairs
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="metadata" type="object" required>
+  Indicator metadata describing the sustainability metric.
+  
+  <Expandable title="Metadata Properties">
+    <ParamField body="name" type="string" required>
+      Name of the sustainability indicator
+    </ParamField>
+    <ParamField body="domain" type="string" required>
+      Domain (e.g., Environment, Social)
+    </ParamField>
+    <ParamField body="subdomain" type="string" required>
+      Subdomain classification
+    </ParamField>
+    <ParamField body="description" type="string" required>
+      Detailed description of the indicator
+    </ParamField>
+    <ParamField body="unit" type="string" required>
+      Unit of measurement
+    </ParamField>
+    <ParamField body="source" type="string" required>
+      Data source name
+    </ParamField>
+    <ParamField body="scale" type="string" required>
+      Scale (e.g., National, Regional)
+    </ParamField>
+    <ParamField body="governance_indicator" type="boolean" required>
+      Whether this is a governance indicator
+    </ParamField>
+    <ParamField body="carrying_capacity" type="number">
+      Maximum capacity value (optional)
+    </ParamField>
+    <ParamField body="periodicity" type="string" required>
+      Data collection frequency
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="auto_create_resource" type="boolean" default="true">
+  Automatically create a resource for this wrapper
+</ParamField>
+
+### Response
+
+<ResponseField name="wrapper_id" type="string">
+  Unique identifier for the generated wrapper
+</ResponseField>
+
+<ResponseField name="resource_id" type="string">
+  Associated resource ID (if auto_create_resource is true)
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  The indicator metadata from the request
+</ResponseField>
+
+<ResponseField name="source_type" type="string">
+  Type of data source (API, CSV, or XLSX)
+</ResponseField>
+
+<ResponseField name="source_config" type="object">
+  Source-specific configuration
+</ResponseField>
+
+<ResponseField name="generated_code" type="string">
+  Generated wrapper code (null during generation)
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="completed_at" type="string">
+  ISO 8601 timestamp of completion (null if not completed)
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `pending`, `generating`, `creating_resource`, `executing`, `stopped`, `completed`, or `error`
+</ResponseField>
+
+<ResponseField name="error_message" type="string">
+  Error message if status is `error`
+</ResponseField>
+
+<ResponseField name="execution_log" type="array">
+  Array of execution log messages
+</ResponseField>
+
+<ResponseField name="last_health_check" type="string">
+  ISO 8601 timestamp of last health check
+</ResponseField>
+
+<ResponseField name="last_data_sent" type="string">
+  ISO 8601 timestamp of last data transmission
+</ResponseField>
+
+<ResponseField name="data_points_count" type="integer">
+  Number of data points processed
+</ResponseField>
+
+<ResponseField name="monitoring_details" type="object">
+  Type-specific monitoring information
+</ResponseField>
+
+<ResponseField name="phase" type="string">
+  Current execution phase: `historical` or `continuous`
+</ResponseField>
+
+<ResponseField name="high_water_mark" type="string">
+  Newest data point timestamp ever sent (for resumable execution)
+</ResponseField>
+
+<ResponseField name="low_water_mark" type="string">
+  Oldest data point timestamp ever sent (for resumable execution)
+</ResponseField>
+
+<ResponseField name="execution_result" type="object">
+  Result of the last execution (if available)
+</ResponseField>
+
+### Example Request
+
+```bash cURL
+curl -X POST https://api.example.com/resources/wrappers/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "source_type": "API",
+    "source_config": {
+      "location": "https://data-api.example.com/climate/temperature",
+      "auth_type": "bearer",
+      "bearer_token": "your-api-token",
+      "timeout_seconds": 30,
+      "date_field": "timestamp",
+      "value_field": "temperature_celsius"
+    },
+    "metadata": {
+      "name": "Average Temperature",
+      "domain": "Environment",
+      "subdomain": "Climate",
+      "description": "Average daily temperature in degrees Celsius",
+      "unit": "°C",
+      "source": "National Climate Service",
+      "scale": "National",
+      "governance_indicator": false,
+      "periodicity": "Daily"
+    },
+    "auto_create_resource": true
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "resource_id": "res_123456789",
+  "metadata": {
+    "name": "Average Temperature",
+    "domain": "Environment",
+    "subdomain": "Climate",
+    "description": "Average daily temperature in degrees Celsius",
+    "unit": "°C",
+    "source": "National Climate Service",
+    "scale": "National",
+    "governance_indicator": false,
+    "carrying_capacity": null,
+    "periodicity": "Daily"
+  },
+  "source_type": "API",
+  "source_config": {
+    "location": "https://data-api.example.com/climate/temperature",
+    "auth_type": "bearer",
+    "bearer_token": "your-api-token",
+    "timeout_seconds": 30,
+    "date_field": "timestamp",
+    "value_field": "temperature_celsius",
+    "custom_headers": {},
+    "query_params": {}
+  },
+  "generated_code": null,
+  "created_at": "2026-03-03T10:30:00Z",
+  "updated_at": "2026-03-03T10:30:00Z",
+  "completed_at": null,
+  "status": "pending",
+  "error_message": null,
+  "execution_log": [],
+  "last_health_check": "2026-03-03T10:30:00Z",
+  "last_data_sent": null,
+  "data_points_count": 0,
+  "monitoring_details": {},
+  "phase": "historical",
+  "high_water_mark": null,
+  "low_water_mark": null,
+  "execution_result": null
+}
+```
+
+### Error Responses
+
+<ResponseField name="400 Bad Request">
+  Invalid wrapper generation request. Common causes:
+  - Missing required fields
+  - Invalid source_type value
+  - File not found for CSV/XLSX sources
+  - Invalid configuration parameters
+  
+  ```json
+  {
+    "detail": "Invalid request: File not found: file_abc123"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="503 Service Unavailable">
+  External service error during wrapper generation:
+  - Connection error to external services
+  - Timeout communicating with dependencies
+  - Database unavailable
+  
+  ```json
+  {
+    "detail": "Service unavailable: Connection timeout"
+  }
+  ```
+</ResponseField>

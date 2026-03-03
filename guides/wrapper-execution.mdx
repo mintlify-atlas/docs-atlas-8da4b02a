@@ -1,0 +1,498 @@
+---
+title: Wrapper Execution and Lifecycle
+description: Understand how wrappers execute, their execution modes, and lifecycle management
+---
+
+## Overview
+
+Wrappers execute as separate Python processes that fetch data from sources and send it to RabbitMQ. The execution behavior differs based on the data source type, supporting both one-time batch processing and continuous monitoring.
+
+## Execution Modes
+
+### File-Based Execution (CSV/XLSX)
+
+File wrappers perform **one-time execution**:
+
+<Steps>
+  <Step title="Read File">
+    The wrapper reads the entire CSV or Excel file from disk.
+  </Step>
+  
+  <Step title="Parse Data">
+    Data is parsed into time-series data points with timestamps and values.
+  </Step>
+  
+  <Step title="Send to RabbitMQ">
+    All data points are sent to the data queue in batches.
+  </Step>
+  
+  <Step title="Complete">
+    Wrapper marks itself as `completed` and exits.
+  </Step>
+</Steps>
+
+**Status progression:** `pending` → `generating` → `executing` → `completed`
+
+### API-Based Execution
+
+API wrappers run **continuously** with two phases:
+
+<Tabs>
+  <Tab title="Historical Phase">
+    <Steps>
+      <Step title="Fetch Historical Data">
+        Retrieves all available historical data from the API.
+      </Step>
+      
+      <Step title="Send Data">
+        Sends historical data points to RabbitMQ.
+      </Step>
+      
+      <Step title="Set High Water Mark">
+        Records the newest timestamp as `high_water_mark`.
+      </Step>
+      
+      <Step title="Checkpoint">
+        Updates database with checkpoint state for resumability.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Continuous Phase">
+    <Steps>
+      <Step title="Poll for New Data">
+        Periodically queries the API for data newer than `high_water_mark`.
+      </Step>
+      
+      <Step title="Send New Data">
+        Sends only new data points to avoid duplicates.
+      </Step>
+      
+      <Step title="Update High Water Mark">
+        Updates `high_water_mark` with the newest timestamp received.
+      </Step>
+      
+      <Step title="Sleep and Repeat">
+        Waits before the next poll (configurable interval).
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+**Status:** Remains in `executing` state indefinitely until stopped.
+
+<Note>
+  API wrappers use checkpointing to resume from the last successful data point after restarts, preventing data loss and duplication.
+</Note>
+
+## Executing a Wrapper
+
+### Automatic Execution
+
+Wrappers execute automatically after generation:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/wrappers/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "API",
+    "source_config": {...},
+    "metadata": {...}
+  }'
+```
+
+The generation process includes automatic execution - no additional step needed.
+
+### Manual Execution
+
+Execute an already-generated wrapper manually:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wrappers/{wrapper_id}/execute"
+```
+
+```python Python
+import requests
+
+wrapper_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+response = requests.post(
+    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/execute"
+)
+
+result = response.json()
+print(f"Success: {result['success']}")
+print(f"Message: {result['message']}")
+print(f"Data points sent: {result['data_points_sent']}")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "success": true,
+  "message": "Wrapper executed successfully",
+  "data_points_sent": 150,
+  "execution_time": "2026-03-03T11:25:30Z"
+}
+```
+
+## Process Management
+
+Wrappers run as separate processes managed by the `WrapperProcessManager`.
+
+### Process Lifecycle
+
+<Steps>
+  <Step title="Process Creation">
+    A new Python process is spawned with the generated wrapper code.
+    
+    ```python
+    # Internal process creation (simplified)
+    subprocess.Popen(
+        ["python", "-u", wrapper_file_path, wrapper_id, source_config_json],
+        env=env_with_credentials,
+        stdout=log_file,
+        stderr=error_log
+    )
+    ```
+  </Step>
+  
+  <Step title="Process Monitoring">
+    The process manager checks process health every 30 seconds.
+  </Step>
+  
+  <Step title="Log Management">
+    Output is captured to log files:
+    - `/app/wrapper_logs/{wrapper_id}_stdout.log`
+    - `/app/wrapper_logs/{wrapper_id}_stderr.log`
+  </Step>
+  
+  <Step title="Health Checks">
+    Process status is monitored and reported via health endpoints.
+  </Step>
+</Steps>
+
+### Process Adoption on Restart
+
+<Info>
+  When the service restarts (e.g., during deployment), the process manager automatically adopts orphaned wrapper processes by scanning `/proc` for Python processes running wrapper files.
+</Info>
+
+This ensures continuous execution even during service updates.
+
+## Stopping a Wrapper
+
+Stop a running wrapper gracefully:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wrappers/{wrapper_id}/stop"
+```
+
+```python Python
+import requests
+
+wrapper_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+response = requests.post(
+    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/stop"
+)
+
+result = response.json()
+print(f"Success: {result['success']}")
+print(f"Message: {result['message']}")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "success": true,
+  "message": "Wrapper stopped successfully"
+}
+```
+
+<Steps>
+  <Step title="SIGTERM Sent">
+    A graceful termination signal (SIGTERM) is sent to the process.
+  </Step>
+  
+  <Step title="Wait for Cleanup">
+    The system waits up to 10 seconds for the process to clean up.
+  </Step>
+  
+  <Step title="Force Kill if Needed">
+    If the process doesn't exit, SIGKILL is sent to force termination.
+  </Step>
+  
+  <Step title="Status Update">
+    Database status is updated to `stopped` or `completed`.
+  </Step>
+  
+  <Step title="Cleanup">
+    Process is removed from tracking (logs and code are preserved).
+  </Step>
+</Steps>
+
+<Warning>
+  Stopping an API wrapper loses the in-memory state. The wrapper can resume from the last checkpoint (`high_water_mark`) but may miss data between the last checkpoint and stop time.
+</Warning>
+
+## Checkpointing and Resumability
+
+API wrappers support resumability through checkpointing:
+
+### Checkpoint Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `phase` | string | Current execution phase: `historical` or `continuous` |
+| `high_water_mark` | datetime | Newest data point timestamp ever sent |
+| `low_water_mark` | datetime | Oldest data point timestamp ever sent |
+| `data_points_count` | integer | Total data points sent since creation |
+| `last_data_sent` | datetime | Timestamp of last successful data transmission |
+
+### Resume After Restart
+
+When the service restarts, executing wrappers automatically resume:
+
+```python
+# Service startup resumes executing wrappers
+await wrapper_service.restart_executing_wrappers()
+```
+
+Wrappers resume from their last checkpoint:
+- If in `historical` phase: Continue fetching historical data
+- If in `continuous` phase: Poll for new data since `high_water_mark`
+
+<Tip>
+  Checkpointing ensures no data is lost or duplicated during service restarts or temporary failures.
+</Tip>
+
+## Monitoring Execution
+
+### Check if Actively Executing
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}/health"
+```
+
+```python Python
+import requests
+
+wrapper_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+response = requests.get(
+    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/health"
+)
+
+health = response.json()
+print(f"Health Status: {health['health_status']}")
+print(f"Is Executing: {health['is_actively_executing']}")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "health_status": "HEALTHY",
+  "is_actively_executing": true
+}
+```
+
+### Health Statuses
+
+| Status | Description |
+|--------|-------------|
+| `HEALTHY` | Process is running normally |
+| `STALLED` | Process hasn't sent data in expected timeframe |
+| `DEGRADED` | Process is running but experiencing issues |
+| `CRASHED` | Process has terminated unexpectedly |
+| `UNKNOWN` | Cannot determine process state |
+
+### Get Detailed Monitoring
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}/monitoring"
+```
+
+```python Python
+import requests
+
+wrapper_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+response = requests.get(
+    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/monitoring"
+)
+
+details = response.json()
+print(f"Health: {details['health_status']}")
+print(f"Process ID: {details['monitoring_details']['process_id']}")
+print(f"Uptime: {details['monitoring_details']['uptime_seconds']}s")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "health_status": "HEALTHY",
+  "monitoring_details": {
+    "process_id": 12345,
+    "exit_code": null,
+    "uptime_seconds": 3600.5,
+    "started_at": "2026-03-03T10:30:00Z",
+    "last_health_check": "2026-03-03T11:30:00Z",
+    "log_files": {
+      "stdout": "/app/wrapper_logs/a1b2c3d4-e5f6-7890-abcd-ef1234567890_stdout.log",
+      "stderr": "/app/wrapper_logs/a1b2c3d4-e5f6-7890-abcd-ef1234567890_stderr.log"
+    }
+  }
+}
+```
+
+## Execution Logs
+
+View real-time execution logs:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}/logs?limit=100"
+```
+
+```python Python
+import requests
+
+wrapper_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+response = requests.get(
+    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/logs",
+    params={"limit": 100}
+)
+
+logs = response.json()
+for log_line in logs['logs']:
+    print(log_line)
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "logs": [
+    "[STDOUT] Starting wrapper execution...",
+    "[STDOUT] Fetching data from API: https://api.example.com/data",
+    "[STDOUT] Retrieved 150 data points",
+    "[STDOUT] Sent 150 data points to RabbitMQ",
+    "[STDOUT] Updated high_water_mark: 2026-03-03T11:00:00Z",
+    "[STDOUT] Entering continuous polling mode..."
+  ],
+  "total_lines": 6
+}
+```
+
+<Note>
+  Logs include both stdout and stderr, labeled accordingly. The `limit` parameter controls how many recent lines to return (default: 200).
+</Note>
+
+## Error Handling
+
+### Execution Errors
+
+<AccordionGroup>
+  <Accordion title="Wrapper not found (404)">
+    **Error:**
+    ```json
+    {
+      "detail": "Wrapper not found"
+    }
+    ```
+    
+    **Solution:** Verify the wrapper_id is correct and the wrapper exists.
+  </Accordion>
+  
+  <Accordion title="Execution error (400)">
+    **Error:**
+    ```json
+    {
+      "detail": "Execution error: Wrapper file not found"
+    }
+    ```
+    
+    **Solution:** The wrapper code file may have been deleted. Regenerate the wrapper.
+  </Accordion>
+  
+  <Accordion title="Service unavailable (503)">
+    **Error:**
+    ```json
+    {
+      "detail": "Service unavailable: Database connection timeout"
+    }
+    ```
+    
+    **Solution:** The service is experiencing connectivity issues. Retry after a moment.
+  </Accordion>
+</AccordionGroup>
+
+### Crashed Wrappers
+
+When a wrapper crashes, the system:
+
+1. Detects process termination via exit code
+2. Captures last log lines (stdout and stderr)
+3. Updates database status to `error`
+4. Stores error message with crash logs
+5. Cleans up process resources
+
+**Crashed Wrapper Status:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "error",
+  "error_message": "Process crashed. Last logs:\n[STDERR] ConnectionError: Failed to connect to API\n[STDERR] Retrying in 5 seconds...\n[STDERR] Max retries exceeded",
+  "completed_at": "2026-03-03T11:45:00Z"
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Monitor Health Regularly" icon="heart-pulse">
+    Set up periodic health checks for API wrappers to catch issues early.
+  </Card>
+  
+  <Card title="Review Logs on Errors" icon="file-magnifying-glass">
+    Check stdout and stderr logs to diagnose execution problems.
+  </Card>
+  
+  <Card title="Use Checkpoints" icon="bookmark">
+    For API wrappers, rely on automatic checkpointing for resilience.
+  </Card>
+  
+  <Card title="Graceful Stops" icon="hand">
+    Always use the stop endpoint rather than killing processes directly.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Deep dive into monitoring wrapper health and performance
+  </Card>
+  
+  <Card title="Generating Wrappers" icon="wand-magic-sparkles" href="/guides/generating-wrappers">
+    Learn how to generate wrappers for different data sources
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/wrappers/execute">
+    View complete wrapper execution API documentation
+  </Card>
+  
+  <Card title="File Upload" icon="upload" href="/guides/file-upload">
+    Upload CSV/XLSX files for wrapper generation
+  </Card>
+</CardGroup>

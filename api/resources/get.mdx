@@ -1,0 +1,98 @@
+---
+title: "Get Resource"
+description: "Retrieve a specific resource by ID"
+---
+
+## GET /resources/{resource_id}
+
+Returns details for a specific resource by its ID. Only returns resources that have not been soft-deleted.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Path Parameters
+
+<ParamField path="resource_id" type="string" required>
+  The unique identifier of the resource (MongoDB ObjectId format)
+</ParamField>
+
+### Response
+
+Returns a single resource object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the resource (MongoDB ObjectId)
+</ResponseField>
+
+<ResponseField name="wrapper_id" type="string" required>
+  ID of the wrapper associated with this resource
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the resource
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of the resource
+</ResponseField>
+
+<ResponseField name="startPeriod" type="datetime" optional>
+  Start period timestamp for the resource
+</ResponseField>
+
+<ResponseField name="endPeriod" type="datetime" optional>
+  End period timestamp for the resource
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/resources/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response
+
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "wrapper_id": "wrapper_123",
+  "name": "Production Database",
+  "type": "database",
+  "startPeriod": "2024-01-15T10:30:00Z",
+  "endPeriod": null
+}
+```
+
+### Error Responses
+
+<ResponseField name="400" type="Bad Request">
+  Invalid resource ID format
+</ResponseField>
+
+```json
+{
+  "detail": "Invalid resource ID"
+}
+```
+
+<ResponseField name="404" type="Not Found">
+  Resource not found
+</ResponseField>
+
+```json
+{
+  "detail": "Resource not found"
+}
+```
+
+<ResponseField name="500" type="Internal Server Error">
+  Database operation failed
+</ResponseField>
+
+```json
+{
+  "detail": "Internal server error"
+}
+```

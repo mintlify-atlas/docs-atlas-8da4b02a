@@ -1,0 +1,618 @@
+---
+title: Data Sources
+description: Understanding the supported data source types (API, CSV, XLSX) and how they work with wrappers
+---
+
+## Overview
+
+The Resource Service supports three types of data sources for collecting sustainability indicators. Each source type has its own configuration schema and wrapper behavior:
+
+<CardGroup cols={3}>
+  <Card title="API" icon="cloud">
+    Real-time data from REST APIs with authentication support
+  </Card>
+  <Card title="CSV" icon="file-csv">
+    Comma-separated value files with structured tabular data
+  </Card>
+  <Card title="XLSX" icon="file-excel">
+    Excel spreadsheets with support for multiple sheets
+  </Card>
+</CardGroup>
+
+## Source Type Enumeration
+
+Source types are defined as an enumeration:
+
+```python
+class SourceType(str, Enum):
+    API = "API"
+    CSV = "CSV"
+    XLSX = "XLSX"
+```
+
+## API Sources
+
+API sources enable continuous, real-time data collection from REST endpoints.
+
+### Configuration Schema
+
+```python
+class APISourceConfig(BaseModel):
+    location: str                      # API endpoint URL
+    auth_type: str = "none"            # Authentication method
+    api_key: Optional[str] = None      # API key value
+    api_key_header: str = "X-API-Key"  # Header name for API key
+    bearer_token: Optional[str] = None # Bearer token
+    username: Optional[str] = None     # Basic auth username
+    password: Optional[str] = None     # Basic auth password
+    timeout_seconds: int = 30          # Request timeout
+    date_field: Optional[str] = None   # Timestamp field name
+    value_field: Optional[str] = None  # Value field name
+    custom_headers: Dict[str, str] = {}     # Additional headers
+    query_params: Dict[str, str] = {}       # Default query parameters
+```
+
+### Authentication Methods
+
+The service supports four authentication types:
+
+<Tabs>
+  <Tab title="API Key">
+    Pass an API key in a custom header:
+    
+    ```json
+    {
+      "source_type": "API",
+      "source_config": {
+        "location": "https://api.example.com/data",
+        "auth_type": "api_key",
+        "api_key": "sk_live_abc123xyz",
+        "api_key_header": "X-API-Key"
+      }
+    }
+    ```
+    
+    **Generated Auth Code:**
+    ```python
+    headers = {"X-API-Key": "sk_live_abc123xyz"}
+    response = requests.get(endpoint, headers=headers)
+    ```
+  </Tab>
+  
+  <Tab title="Bearer Token">
+    Use OAuth 2.0 bearer token authentication:
+    
+    ```json
+    {
+      "source_type": "API",
+      "source_config": {
+        "location": "https://api.example.com/data",
+        "auth_type": "bearer",
+        "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      }
+    }
+    ```
+    
+    **Generated Auth Code:**
+    ```python
+    headers = {"Authorization": "Bearer eyJhbGci..."}
+    response = requests.get(endpoint, headers=headers)
+    ```
+  </Tab>
+  
+  <Tab title="Basic Auth">
+    HTTP Basic Authentication with username and password:
+    
+    ```json
+    {
+      "source_type": "API",
+      "source_config": {
+        "location": "https://api.example.com/data",
+        "auth_type": "basic",
+        "username": "user@example.com",
+        "password": "secretpass123"
+      }
+    }
+    ```
+    
+    **Generated Auth Code:**
+    ```python
+    import base64
+    credentials = base64.b64encode(b"user@example.com:secretpass123").decode()
+    headers = {"Authorization": f"Basic {credentials}"}
+    response = requests.get(endpoint, headers=headers)
+    ```
+  </Tab>
+  
+  <Tab title="None">
+    No authentication required (public API):
+    
+    ```json
+    {
+      "source_type": "API",
+      "source_config": {
+        "location": "https://api.open-data.gov/indicators",
+        "auth_type": "none"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Custom Headers and Parameters
+
+You can specify additional headers and query parameters:
+
+```json
+{
+  "source_type": "API",
+  "source_config": {
+    "location": "https://api.example.com/data",
+    "auth_type": "none",
+    "custom_headers": {
+      "Accept": "application/json",
+      "User-Agent": "ResourceService/1.0"
+    },
+    "query_params": {
+      "region": "europe",
+      "format": "json"
+    }
+  }
+}
+```
+
+**Generated Request:**
+```python
+headers = {
+    "Accept": "application/json",
+    "User-Agent": "ResourceService/1.0"
+}
+params = {"region": "europe", "format": "json"}
+response = requests.get(
+    "https://api.example.com/data",
+    headers=headers,
+    params=params,
+    timeout=30
+)
+```
+
+### AI-Assisted API Exploration
+
+For API sources, the AI can use tools to explore the endpoint during wrapper generation:
+
+```python
+async def _call_model_with_tools(
+    self,
+    prompt: str,
+    auth_config: Dict[str, Any],
+    max_tool_calls: int = 15,
+    max_chars: int = 2500,
+    wrapper_id: str = None,
+) -> str:
+    runtime = create_tool_runtime(
+        auth_config=auth_config,
+        max_chars=max_chars,
+    )
+    
+    config = types.GenerateContentConfig(
+        tools=runtime.get_tools(),
+        tool_config=types.ToolConfig(
+            function_calling_config=types.FunctionCallingConfig(mode="AUTO")
+        ),
+    )
+    
+    response = await self.client.aio.models.generate_content(
+        model=self.model_name,
+        contents=contents,
+        config=config,
+    )
+```
+
+<Info>
+The AI makes actual API calls during generation to understand response structure, field naming, and data formats. This results in more accurate, robust wrappers.
+</Info>
+
+### API Sample Extraction
+
+Before generation, the system fetches a sample response:
+
+```python
+def get_api_sample(
+    self, endpoint: str, auth_config: Dict[str, Any], max_chars: int = 2500
+) -> str:
+    # Prepare headers
+    headers = auth_config.get("headers", {})
+    
+    # Add API key if specified
+    if "api_key" in auth_config and "header_name" in auth_config:
+        headers[auth_config["header_name"]] = auth_config["api_key"]
+    
+    # Make API call
+    response = requests.get(
+        endpoint,
+        headers=headers,
+        params=auth_config.get("params", {}),
+        timeout=30
+    )
+    
+    # Parse and truncate response
+    json_data = response.json()
+    sample_text = json.dumps(json_data, indent=2)
+    if len(sample_text) > max_chars:
+        sample_text = sample_text[:max_chars] + "\n... (truncated)"
+    
+    return f"API Response (Status: {response.status_code}):\n{sample_text}"
+```
+
+### API Wrapper Behavior
+
+**Execution Mode:** Continuous (runs indefinitely)
+
+**Phase Progression:**
+1. **Historical Phase:** Collects all past data
+2. **Continuous Phase:** Polls for new data based on periodicity
+
+**Lifecycle:**
+- Created → Generating → Executing → (runs until stopped)
+- Automatically resumes after service restart using checkpoints
+
+## CSV Sources
+
+CSV sources are ideal for one-time bulk imports or periodic file uploads.
+
+### Configuration Schema
+
+```python
+class CSVSourceConfig(BaseModel):
+    file_id: str                       # Uploaded file identifier
+    location: Optional[str] = None     # Computed file path (backend-populated)
+```
+
+<Note>
+The `location` field is automatically populated by the backend when a file is uploaded. You only need to provide the `file_id` received from the file upload endpoint.
+</Note>
+
+### File Upload Flow
+
+<Steps>
+  <Step title="Upload CSV file">
+    ```bash
+    curl -X POST "http://api.example.com/resources/wrappers/files/upload" \
+      -H "Content-Type: multipart/form-data" \
+      -F "file=@temperature_data.csv"
+    ```
+    
+    **Response:**
+    ```json
+    {
+      "file_id": "csv_a1b2c3d4e5f6",
+      "filename": "temperature_data.csv",
+      "size": 45678
+    }
+    ```
+  </Step>
+  
+  <Step title="Create wrapper with file_id">
+    ```json
+    {
+      "source_type": "CSV",
+      "source_config": {
+        "file_id": "csv_a1b2c3d4e5f6"
+      },
+      "metadata": {
+        "name": "Temperature Data - Lisbon",
+        "domain": "Environment",
+        ...
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Backend computes location">
+    The service automatically computes and stores the file path:
+    
+    ```python
+    file_path = f"/app/uploads/{file_id}.csv"
+    source_config.location = file_path
+    ```
+  </Step>
+</Steps>
+
+### CSV Sample Extraction
+
+The generator extracts the first 20 lines for AI analysis:
+
+```python
+def get_csv_sample(self, file_path: str, max_lines: int = 20) -> str:
+    sample_lines = []
+    with open(file_path, "r", encoding="utf-8") as file:
+        for i, line in enumerate(file):
+            if i >= max_lines:
+                break
+            sample_lines.append(line.strip())
+    
+    return "\n".join(sample_lines)
+```
+
+**Example Sample:**
+```csv
+date,temperature,humidity
+2024-01-01,15.5,72
+2024-01-02,16.2,68
+2024-01-03,14.8,75
+...
+```
+
+### CSV Wrapper Behavior
+
+**Execution Mode:** Once (processes file and completes)
+
+**Lifecycle:**
+- Created → Generating → Executing → Completed
+- Status changes to `COMPLETED` after all rows are processed
+
+<Warning>
+CSV wrappers process the entire file in a single execution. For large files (>100,000 rows), consider splitting into smaller chunks or using an API source if possible.
+</Warning>
+
+## XLSX Sources
+
+XLSX sources support Excel spreadsheets with multiple sheets and complex structures.
+
+### Configuration Schema
+
+```python
+class XLSXSourceConfig(BaseModel):
+    file_id: str                       # Uploaded file identifier
+    location: Optional[str] = None     # Computed file path (backend-populated)
+```
+
+### File Upload Flow
+
+Identical to CSV, but with `.xlsx` files:
+
+```bash
+curl -X POST "http://api.example.com/resources/wrappers/files/upload" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@emissions_report.xlsx"
+```
+
+### XLSX Sample Extraction
+
+Extracts metadata and samples from all sheets:
+
+```python
+def get_xlsx_sample(self, file_path: str, max_lines_per_sheet: int = 15) -> str:
+    excel_file = pd.ExcelFile(file_path)
+    sheet_names = excel_file.sheet_names
+    
+    sample_data = []
+    sample_data.append(f"XLSX File: {file_path}")
+    sample_data.append(f"Total sheets: {len(sheet_names)}")
+    sample_data.append(f"Sheet names: {sheet_names}")
+    
+    for sheet_name in sheet_names:
+        sample_data.append(f"\n=== Sheet: {sheet_name} ===")
+        df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=max_lines_per_sheet)
+        sample_data.append(f"Columns: {list(df.columns)}")
+        sample_data.append(f"Shape: {df.shape}")
+        sample_data.append("Sample data:")
+        sample_data.append(df.to_string())
+    
+    return "\n".join(sample_data)
+```
+
+**Example Sample:**
+```
+XLSX File: /app/uploads/emissions_report.xlsx
+Total sheets: 3
+Sheet names: ['2023', '2024', 'Metadata']
+
+=== Sheet: 2023 ===
+Columns: ['Month', 'CO2_tons', 'Region']
+Shape: (12, 3)
+Sample data:
+   Month  CO2_tons     Region
+0    Jan     1250.5     North
+1    Feb     1180.2     North
+...
+
+=== Sheet: 2024 ===
+...
+```
+
+### XLSX Wrapper Behavior
+
+**Execution Mode:** Once (processes all sheets and completes)
+
+**Multi-Sheet Handling:**
+- AI determines which sheet(s) contain the actual data
+- Can extract from multiple sheets if needed
+- Handles varying column structures across sheets
+
+<Info>
+The AI is particularly good at identifying the correct sheet when files contain metadata sheets, summary sheets, and data sheets together.
+</Info>
+
+## Source Configuration Comparison
+
+<Tabs>
+  <Tab title="Feature Comparison">
+    | Feature | API | CSV | XLSX |
+    |---------|-----|-----|------|
+    | **Execution** | Continuous | Once | Once |
+    | **Authentication** | Yes | No | No |
+    | **File Upload** | No | Yes | Yes |
+    | **Historical Data** | Yes | Full file | Full file |
+    | **Real-time Updates** | Yes | No | No |
+    | **Multiple Sources** | Single endpoint | Single file | Multiple sheets |
+    | **Checkpointing** | Yes | No | No |
+    | **Auto-resume** | Yes | No | No |
+  </Tab>
+  
+  <Tab title="Use Cases">
+    **API Sources:**
+    - Government open data portals
+    - Weather/climate APIs
+    - Financial market data
+    - IoT sensor networks
+    - Social media metrics
+    
+    **CSV Sources:**
+    - Historical reports
+    - One-time data imports
+    - Exported database tables
+    - Survey results
+    - Legacy data migration
+    
+    **XLSX Sources:**
+    - Annual sustainability reports
+    - Multi-year datasets
+    - Complex hierarchical data
+    - Financial statements
+    - Multi-region aggregations
+  </Tab>
+  
+  <Tab title="Performance">
+    **API Sources:**
+    - ✅ Low memory usage (streaming)
+    - ✅ Incremental data collection
+    - ⚠️ Network dependent
+    - ⚠️ API rate limits
+    
+    **CSV Sources:**
+    - ✅ Fast processing
+    - ✅ No external dependencies
+    - ⚠️ Memory usage scales with file size
+    - ⚠️ No incremental updates
+    
+    **XLSX Sources:**
+    - ✅ Handles complex structures
+    - ✅ Multiple datasets in one file
+    - ⚠️ Higher memory usage (pandas)
+    - ⚠️ Slower than CSV
+  </Tab>
+</Tabs>
+
+## Data Source Selection Guide
+
+Choose the appropriate source type based on your needs:
+
+<Steps>
+  <Step title="Assess data update frequency">
+    - **Real-time or frequent updates** → API
+    - **Periodic updates** → API with appropriate periodicity
+    - **One-time or rare updates** → CSV or XLSX
+  </Step>
+  
+  <Step title="Evaluate data structure">
+    - **Simple tabular data** → CSV
+    - **Multiple related datasets** → XLSX
+    - **Dynamic/nested structures** → API
+  </Step>
+  
+  <Step title="Consider data source constraints">
+    - **Authentication required** → API (supports auth)
+    - **No API available** → File upload (CSV/XLSX)
+    - **Rate limits** → Adjust API periodicity
+  </Step>
+  
+  <Step title="Plan for scalability">
+    - **Growing dataset** → API (incremental)
+    - **Fixed historical data** → CSV/XLSX (one-time)
+    - **Continuous monitoring** → API
+  </Step>
+</Steps>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="API Sources" icon="cloud">
+    ✅ **Do:**
+    - Test the API endpoint before creating a wrapper
+    - Use the most specific `date_field` and `value_field` possible
+    - Set appropriate timeout values for slow APIs
+    - Use query parameters to filter data at the source
+    
+    ❌ **Don't:**
+    - Hard-code credentials in the configuration
+    - Use extremely short periodicities that could hit rate limits
+    - Ignore authentication errors (check logs immediately)
+  </Accordion>
+  
+  <Accordion title="CSV Sources" icon="file-csv">
+    ✅ **Do:**
+    - Use UTF-8 encoding
+    - Include clear column headers in the first row
+    - Use consistent date formats (ISO 8601 recommended)
+    - Keep files under 50MB for best performance
+    
+    ❌ **Don't:**
+    - Use non-standard delimiters (stick to commas)
+    - Include summary rows or merged cells
+    - Use multiple date/time formats in the same file
+  </Accordion>
+  
+  <Accordion title="XLSX Sources" icon="file-excel">
+    ✅ **Do:**
+    - Use descriptive sheet names
+    - Place data in the first row/column without gaps
+    - Use consistent formatting within each sheet
+    - Name sheets according to their content (e.g., "2024_Data")
+    
+    ❌ **Don't:**
+    - Use heavily formatted spreadsheets with merged cells
+    - Include charts or pivot tables in data sheets
+    - Use formulas in data cells (export values only)
+    - Mix data types in the same column
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<Accordion title="API Connection Errors">
+  **Symptoms:** Wrapper status is ERROR, logs show connection timeouts
+  
+  **Solutions:**
+  - Verify the endpoint URL is correct and accessible
+  - Check authentication credentials are valid
+  - Increase `timeout_seconds` for slow APIs
+  - Ensure network connectivity from the service
+</Accordion>
+
+<Accordion title="CSV Parsing Errors">
+  **Symptoms:** Wrapper completes but no data points sent
+  
+  **Solutions:**
+  - Verify file encoding is UTF-8
+  - Check for consistent column structure
+  - Ensure date columns use recognizable formats
+  - Look for special characters or malformed rows
+</Accordion>
+
+<Accordion title="XLSX Sheet Detection Issues">
+  **Symptoms:** AI selects wrong sheet or misses data
+  
+  **Solutions:**
+  - Use descriptive sheet names (avoid generic names like "Sheet1")
+  - Move metadata/summary sheets to the end
+  - Ensure data sheets have clear headers in row 1
+  - Manually specify the sheet in indicator description
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create a Wrapper" icon="plus" href="/guides/generating-wrappers">
+    Step-by-step guide to creating wrappers for each source type
+  </Card>
+  <Card title="Wrappers" icon="code" href="/concepts/wrappers">
+    Learn more about how wrappers work and execute
+  </Card>
+  <Card title="File Upload API" icon="upload" href="/api/files/upload">
+    API reference for uploading CSV and XLSX files
+  </Card>
+  <Card title="Wrapper API" icon="book" href="/api/wrappers/list">
+    Complete API reference for wrapper management
+  </Card>
+</CardGroup>

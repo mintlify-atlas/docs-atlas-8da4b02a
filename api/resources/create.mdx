@@ -1,0 +1,133 @@
+---
+title: "Create Resource"
+description: "Create a new resource"
+---
+
+## POST /resources
+
+Creates a new resource associated with an existing wrapper. The resource will be initialized with `startPeriod` and `endPeriod` set to null.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Request Body
+
+<ParamField body="wrapper_id" type="string" required>
+  ID of the wrapper to associate with this resource. The wrapper must already exist in the system.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name of the resource
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Type of the resource
+</ParamField>
+
+### Response
+
+Returns the created resource object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the created resource (MongoDB ObjectId)
+</ResponseField>
+
+<ResponseField name="wrapper_id" type="string" required>
+  ID of the wrapper associated with this resource
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the resource
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of the resource
+</ResponseField>
+
+<ResponseField name="startPeriod" type="datetime" optional>
+  Start period timestamp for the resource (null on creation)
+</ResponseField>
+
+<ResponseField name="endPeriod" type="datetime" optional>
+  End period timestamp for the resource (null on creation)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/resources" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "wrapper_id": "wrapper_123",
+    "name": "Production Database",
+    "type": "database"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "wrapper_id": "wrapper_123",
+  "name": "Production Database",
+  "type": "database",
+  "startPeriod": null,
+  "endPeriod": null
+}
+```
+
+### Error Responses
+
+<ResponseField name="400" type="Bad Request">
+  Failed to create resource. This can occur if:
+  - The wrapper_id does not exist
+  - A resource with the same identifier already exists
+  - The request is malformed
+</ResponseField>
+
+```json
+{
+  "detail": "Wrapper with ID 'wrapper_123' does not exist"
+}
+```
+
+```json
+{
+  "detail": "Resource with this identifier already exists"
+}
+```
+
+```json
+{
+  "detail": "Failed to create resource"
+}
+```
+
+<ResponseField name="422" type="Validation Error">
+  Invalid request body (missing required fields or incorrect types)
+</ResponseField>
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "wrapper_id"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+
+<ResponseField name="500" type="Internal Server Error">
+  Database operation failed
+</ResponseField>
+
+```json
+{
+  "detail": "Internal server error"
+}
+```

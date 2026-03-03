@@ -1,0 +1,95 @@
+---
+title: Stop Wrapper
+description: Stop a running wrapper execution
+---
+
+## POST /resources/wrappers/{wrapper_id}/stop
+
+Stop a running wrapper. This is a universal endpoint that works for all wrapper types (API, CSV, XLSX). The internal implementation varies by wrapper type, but the API interface is consistent.
+
+### Authentication
+
+This endpoint requires authentication. Include your API key in the request headers.
+
+### Path Parameters
+
+<ParamField path="wrapper_id" type="string" required>
+  The unique identifier of the wrapper to stop
+</ParamField>
+
+### Response
+
+<ResponseField name="wrapper_id" type="string">
+  The wrapper ID that was stopped
+</ResponseField>
+
+<ResponseField name="success" type="boolean">
+  Whether the wrapper was stopped successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message describing the result:
+  - "Wrapper stopped successfully" if successful
+  - "Failed to stop wrapper" if unsuccessful
+</ResponseField>
+
+### Example Request
+
+```bash cURL
+curl -X POST https://api.example.com/resources/wrappers/550e8400-e29b-41d4-a716-446655440000/stop \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response (Success)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "success": true,
+  "message": "Wrapper stopped successfully"
+}
+```
+
+### Example Response (Failure)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "success": false,
+  "message": "Failed to stop wrapper"
+}
+```
+
+### Error Responses
+
+<ResponseField name="400 Bad Request">
+  Stop operation error. Common causes:
+  - Wrapper not found
+  - Process lookup error
+  - Permission denied
+  
+  ```json
+  {
+    "detail": "Stop error: Process not found"
+  }
+  ```
+</ResponseField>
+
+### Behavior by Wrapper Type
+
+**API Wrappers:**
+- Terminates the running process
+- Updates wrapper status to `stopped`
+- Preserves checkpoint data (high/low water marks) for resumption
+
+**CSV/XLSX Wrappers:**
+- These typically complete quickly and may not be running when stop is called
+- Returns success if wrapper is already completed
+- No action needed if wrapper is not actively executing
+
+### Notes
+
+- The endpoint is idempotent - calling it multiple times has the same effect
+- Stopping a wrapper preserves its state and execution history
+- Stopped wrappers can be restarted by calling the execute endpoint
+- For API wrappers, the wrapper will resume from its last checkpoint when restarted

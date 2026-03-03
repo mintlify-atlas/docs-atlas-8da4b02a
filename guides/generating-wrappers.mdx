@@ -1,0 +1,515 @@
+---
+title: Generating AI-Powered Wrappers
+description: Generate intelligent data wrappers from various sources using AI-powered code generation
+---
+
+## Overview
+
+The Resource Service uses AI (Google Gemini) to automatically generate Python wrappers that fetch, transform, and send sustainability indicator data. Wrappers support multiple data sources including CSV files, Excel spreadsheets, and REST APIs.
+
+## Data Source Types
+
+The system supports three source types:
+
+<CardGroup cols={3}>
+  <Card title="CSV" icon="file-csv">
+    Comma-separated value files with time-series data
+  </Card>
+  
+  <Card title="XLSX" icon="file-excel">
+    Excel workbooks (both .xlsx and .xls formats)
+  </Card>
+  
+  <Card title="API" icon="globe">
+    REST APIs with JSON responses
+  </Card>
+</CardGroup>
+
+## Generating a CSV Wrapper
+
+Generate a wrapper from an uploaded CSV file:
+
+<Steps>
+  <Step title="Upload the CSV File">
+    First, upload your CSV file to get a `file_id`:
+    
+    ```bash
+    curl -X POST "http://localhost:8000/api/v1/files/upload" \
+      -F "file=@carbon_emissions.csv"
+    ```
+    
+    Save the returned `file_id` for the next step.
+  </Step>
+  
+  <Step title="Generate the Wrapper">
+    Create a wrapper using the file_id:
+    
+    <CodeGroup>
+    ```bash cURL
+    curl -X POST "http://localhost:8000/api/v1/wrappers/generate" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "source_type": "CSV",
+        "source_config": {
+          "file_id": "123e4567-e89b-12d3-a456-426614174000"
+        },
+        "metadata": {
+          "name": "National Carbon Emissions",
+          "domain": "Environment",
+          "subdomain": "Climate Change",
+          "description": "Annual CO2 emissions from fossil fuels",
+          "unit": "million metric tons",
+          "source": "Environmental Protection Agency",
+          "scale": "National",
+          "governance_indicator": false,
+          "periodicity": "annual"
+        },
+        "auto_create_resource": true
+      }'
+    ```
+    
+    ```python Python
+    import requests
+    
+    response = requests.post(
+        "http://localhost:8000/api/v1/wrappers/generate",
+        json={
+            "source_type": "CSV",
+            "source_config": {
+                "file_id": "123e4567-e89b-12d3-a456-426614174000"
+            },
+            "metadata": {
+                "name": "National Carbon Emissions",
+                "domain": "Environment",
+                "subdomain": "Climate Change",
+                "description": "Annual CO2 emissions from fossil fuels",
+                "unit": "million metric tons",
+                "source": "Environmental Protection Agency",
+                "scale": "National",
+                "governance_indicator": False,
+                "periodicity": "annual"
+            },
+            "auto_create_resource": True
+        }
+    )
+    
+    wrapper = response.json()
+    print(f"Wrapper ID: {wrapper['wrapper_id']}")
+    print(f"Resource ID: {wrapper['resource_id']}")
+    print(f"Status: {wrapper['status']}")
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Monitor Generation">
+    The wrapper is generated asynchronously. Check its status:
+    
+    ```bash
+    curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}"
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The backend automatically resolves the `file_id` to the internal file path, so you don't need to provide the `location` field.
+</Note>
+
+## Generating an XLSX Wrapper
+
+Excel files work similarly to CSV files:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wrappers/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "XLSX",
+    "source_config": {
+      "file_id": "987f6543-e21b-43d1-a654-426614174001"
+    },
+    "metadata": {
+      "name": "Renewable Energy Production",
+      "domain": "Environment",
+      "subdomain": "Energy",
+      "description": "Monthly renewable energy generation data",
+      "unit": "megawatt-hours",
+      "source": "Department of Energy",
+      "scale": "Regional",
+      "governance_indicator": false,
+      "periodicity": "monthly"
+    },
+    "auto_create_resource": true
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:8000/api/v1/wrappers/generate",
+    json={
+        "source_type": "XLSX",
+        "source_config": {
+            "file_id": "987f6543-e21b-43d1-a654-426614174001"
+        },
+        "metadata": {
+            "name": "Renewable Energy Production",
+            "domain": "Environment",
+            "subdomain": "Energy",
+            "description": "Monthly renewable energy generation data",
+            "unit": "megawatt-hours",
+            "source": "Department of Energy",
+            "scale": "Regional",
+            "governance_indicator": False,
+            "periodicity": "monthly"
+        },
+        "auto_create_resource": True
+    }
+)
+
+wrapper = response.json()
+```
+</CodeGroup>
+
+<Tip>
+  Both .xlsx and .xls formats are supported. The system automatically detects the format.
+</Tip>
+
+## Generating an API Wrapper
+
+Create a wrapper that polls a REST API for real-time data:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wrappers/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "API",
+    "source_config": {
+      "location": "https://api.example.com/v1/air-quality",
+      "auth_type": "bearer",
+      "bearer_token": "your_token_here",
+      "timeout_seconds": 30,
+      "date_field": "timestamp",
+      "value_field": "aqi_value",
+      "custom_headers": {
+        "Accept": "application/json"
+      },
+      "query_params": {
+        "location": "urban_area_1",
+        "metric": "pm2.5"
+      }
+    },
+    "metadata": {
+      "name": "Air Quality Index",
+      "domain": "Environment",
+      "subdomain": "Air Quality",
+      "description": "Real-time air quality measurements",
+      "unit": "AQI",
+      "source": "Environmental Monitoring Network",
+      "scale": "Local",
+      "governance_indicator": false,
+      "periodicity": "real-time"
+    },
+    "auto_create_resource": true
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:8000/api/v1/wrappers/generate",
+    json={
+        "source_type": "API",
+        "source_config": {
+            "location": "https://api.example.com/v1/air-quality",
+            "auth_type": "bearer",
+            "bearer_token": "your_token_here",
+            "timeout_seconds": 30,
+            "date_field": "timestamp",
+            "value_field": "aqi_value",
+            "custom_headers": {
+                "Accept": "application/json"
+            },
+            "query_params": {
+                "location": "urban_area_1",
+                "metric": "pm2.5"
+            }
+        },
+        "metadata": {
+            "name": "Air Quality Index",
+            "domain": "Environment",
+            "subdomain": "Air Quality",
+            "description": "Real-time air quality measurements",
+            "unit": "AQI",
+            "source": "Environmental Monitoring Network",
+            "scale": "Local",
+            "governance_indicator": False,
+            "periodicity": "real-time"
+        },
+        "auto_create_resource": True
+    }
+)
+
+wrapper = response.json()
+```
+</CodeGroup>
+
+### API Authentication Types
+
+The system supports multiple authentication methods:
+
+<Tabs>
+  <Tab title="Bearer Token">
+    ```json
+    {
+      "auth_type": "bearer",
+      "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+  </Tab>
+  
+  <Tab title="API Key">
+    ```json
+    {
+      "auth_type": "api_key",
+      "api_key": "your-api-key-here",
+      "api_key_header": "X-API-Key"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Basic Auth">
+    ```json
+    {
+      "auth_type": "basic",
+      "username": "your_username",
+      "password": "your_password"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="No Auth">
+    ```json
+    {
+      "auth_type": "none"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Response Structure
+
+**Successful Generation Response:**
+
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "resource_id": "507f1f77bcf86cd799439011",
+  "metadata": {
+    "name": "National Carbon Emissions",
+    "domain": "Environment",
+    "subdomain": "Climate Change",
+    "description": "Annual CO2 emissions from fossil fuels",
+    "unit": "million metric tons",
+    "source": "Environmental Protection Agency",
+    "scale": "National",
+    "governance_indicator": false,
+    "carrying_capacity": null,
+    "periodicity": "annual"
+  },
+  "source_type": "CSV",
+  "source_config": {
+    "file_id": "123e4567-e89b-12d3-a456-426614174000",
+    "location": "/app/uploads/123e4567-e89b-12d3-a456-426614174000/carbon_emissions.csv"
+  },
+  "generated_code": null,
+  "created_at": "2026-03-03T10:30:00Z",
+  "updated_at": "2026-03-03T10:30:00Z",
+  "completed_at": null,
+  "status": "pending",
+  "error_message": null,
+  "execution_log": [],
+  "last_health_check": "2026-03-03T10:30:00Z",
+  "last_data_sent": null,
+  "data_points_count": 0,
+  "monitoring_details": {},
+  "phase": "historical",
+  "high_water_mark": null,
+  "low_water_mark": null,
+  "execution_result": null
+}
+```
+
+## Wrapper Generation Workflow
+
+<Steps>
+  <Step title="Request Received">
+    API receives the generation request and validates the configuration.
+  </Step>
+  
+  <Step title="Database Entry Created">
+    A wrapper record is created with status `pending`.
+  </Step>
+  
+  <Step title="Resource Created">
+    If `auto_create_resource` is true, a resource is created and linked to the wrapper.
+  </Step>
+  
+  <Step title="Task Queued">
+    The wrapper generation task is queued to RabbitMQ for asynchronous processing.
+  </Step>
+  
+  <Step title="AI Code Generation">
+    Status changes to `generating`. The AI generates Python code based on the source type and metadata.
+  </Step>
+  
+  <Step title="Code Saved">
+    Generated code is saved to `/app/generated_wrappers/{wrapper_id}.py` and stored in the database.
+  </Step>
+  
+  <Step title="Execution Started">
+    Status changes to `executing`. The wrapper process is started in a separate Python process.
+  </Step>
+  
+  <Step title="Data Collection">
+    - **File wrappers (CSV/XLSX)**: Read all data once and complete
+    - **API wrappers**: Run continuously, polling for new data
+  </Step>
+</Steps>
+
+## Wrapper Statuses
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Wrapper created, waiting for generation |
+| `generating` | AI is generating the wrapper code |
+| `creating_resource` | Resource is being created |
+| `executing` | Wrapper is running and collecting data |
+| `completed` | Wrapper finished successfully (file-based only) |
+| `stopped` | Wrapper was manually stopped |
+| `error` | Wrapper encountered an error |
+
+## Metadata Fields
+
+All wrappers require comprehensive metadata:
+
+<ParamField path="name" type="string" required>
+  Clear, descriptive name for the indicator
+</ParamField>
+
+<ParamField path="domain" type="string" required>
+  High-level domain (e.g., "Environment", "Social", "Economic")
+</ParamField>
+
+<ParamField path="subdomain" type="string" required>
+  Specific subdomain (e.g., "Climate Change", "Air Quality", "Energy")
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Detailed description of what the indicator measures
+</ParamField>
+
+<ParamField path="unit" type="string" required>
+  Unit of measurement (e.g., "tons CO2", "AQI", "percentage")
+</ParamField>
+
+<ParamField path="source" type="string" required>
+  Name of the data source or organization
+</ParamField>
+
+<ParamField path="scale" type="string" required>
+  Geographic or organizational scale (e.g., "National", "Regional", "Local")
+</ParamField>
+
+<ParamField path="governance_indicator" type="boolean" required>
+  Whether this is a governance indicator
+</ParamField>
+
+<ParamField path="carrying_capacity" type="number">
+  Maximum sustainable capacity (optional)
+</ParamField>
+
+<ParamField path="periodicity" type="string" required>
+  Data collection frequency (e.g., "annual", "monthly", "real-time")
+</ParamField>
+
+## Error Handling
+
+### Common Errors
+
+<AccordionGroup>
+  <Accordion title="File not found (400)">
+    **Error:**
+    ```json
+    {
+      "detail": "File not found: 123e4567-e89b-12d3-a456-426614174000"
+    }
+    ```
+    
+    **Solution:** Verify the file_id exists by checking `/api/v1/files/{file_id}` or uploading the file again.
+  </Accordion>
+  
+  <Accordion title="Invalid request (400)">
+    **Error:**
+    ```json
+    {
+      "detail": "Invalid request: Missing required field 'name' in metadata"
+    }
+    ```
+    
+    **Solution:** Ensure all required metadata fields are provided and properly formatted.
+  </Accordion>
+  
+  <Accordion title="Service unavailable (503)">
+    **Error:**
+    ```json
+    {
+      "detail": "Service unavailable: Connection to database timed out"
+    }
+    ```
+    
+    **Solution:** The service is experiencing connectivity issues. Retry the request after a few moments.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Validate Files First" icon="check">
+    Upload and validate your CSV/XLSX files before generating wrappers to catch data issues early.
+  </Card>
+  
+  <Card title="Use Descriptive Metadata" icon="book">
+    Provide detailed, accurate metadata to help the AI generate better wrapper code.
+  </Card>
+  
+  <Card title="Test API Endpoints" icon="flask">
+    Verify API endpoints are accessible and return expected data before generating wrappers.
+  </Card>
+  
+  <Card title="Monitor Generation" icon="eye">
+    Check wrapper status regularly during generation to catch errors quickly.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="File Upload" icon="upload" href="/guides/file-upload">
+    Learn how to upload and validate CSV/XLSX files
+  </Card>
+  
+  <Card title="Wrapper Execution" icon="play" href="/guides/wrapper-execution">
+    Understand how wrappers execute and collect data
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Monitor wrapper health and view execution logs
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/wrappers/generate">
+    View complete API documentation
+  </Card>
+</CardGroup>

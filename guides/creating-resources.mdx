@@ -1,0 +1,376 @@
+---
+title: Creating and Managing Resources
+description: Learn how to create, update, and manage resources in the Resource Service
+---
+
+## Overview
+
+Resources represent sustainability indicators in the system. Each resource is linked to a wrapper that fetches and processes data. This guide covers the complete lifecycle of resource management.
+
+## Creating a Resource
+
+Resources are typically auto-created when you generate a wrapper, but you can also create them manually.
+
+### Automatic Resource Creation
+
+When generating a wrapper with `auto_create_resource: true` (the default), the system automatically creates a resource:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/wrappers/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "CSV",
+    "source_config": {
+      "file_id": "123e4567-e89b-12d3-a456-426614174000"
+    },
+    "metadata": {
+      "name": "Carbon Emissions",
+      "domain": "Environment",
+      "subdomain": "Climate",
+      "description": "Annual carbon emissions data",
+      "unit": "tons CO2",
+      "source": "EPA",
+      "scale": "National",
+      "governance_indicator": false,
+      "periodicity": "annual"
+    },
+    "auto_create_resource": true
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:8000/api/v1/wrappers/generate",
+    json={
+        "source_type": "CSV",
+        "source_config": {
+            "file_id": "123e4567-e89b-12d3-a456-426614174000"
+        },
+        "metadata": {
+            "name": "Carbon Emissions",
+            "domain": "Environment",
+            "subdomain": "Climate",
+            "description": "Annual carbon emissions data",
+            "unit": "tons CO2",
+            "source": "EPA",
+            "scale": "National",
+            "governance_indicator": False,
+            "periodicity": "annual"
+        },
+        "auto_create_resource": True
+    }
+)
+
+wrapper = response.json()
+print(f"Resource ID: {wrapper['resource_id']}")
+```
+</CodeGroup>
+
+<Note>
+  The resource is created with type `sustainability_indicator` and linked to the wrapper via `wrapper_id`.
+</Note>
+
+### Manual Resource Creation
+
+Create a resource manually by providing the wrapper ID:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "http://localhost:8000/api/v1/resources/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Water Quality Index",
+    "type": "sustainability_indicator"
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:8000/api/v1/resources/",
+    json={
+        "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "name": "Water Quality Index",
+        "type": "sustainability_indicator"
+    }
+)
+
+resource = response.json()
+print(f"Created resource: {resource['id']}")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Water Quality Index",
+  "type": "sustainability_indicator",
+  "startPeriod": null,
+  "endPeriod": null
+}
+```
+
+<Warning>
+  The `wrapper_id` must reference an existing wrapper, or the creation will fail with a validation error.
+</Warning>
+
+## Retrieving Resources
+
+### Get All Resources
+
+List resources with pagination support:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/resources/?skip=0&limit=10"
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "http://localhost:8000/api/v1/resources/",
+    params={"skip": 0, "limit": 10}
+)
+
+resources = response.json()
+for resource in resources:
+    print(f"{resource['name']}: {resource['id']}")
+```
+</CodeGroup>
+
+<Tip>
+  Use pagination parameters to handle large datasets efficiently. The maximum limit is 50 resources per request.
+</Tip>
+
+### Get Resource by ID
+
+Retrieve a specific resource:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/resources/507f1f77bcf86cd799439011"
+```
+
+```python Python
+import requests
+
+resource_id = "507f1f77bcf86cd799439011"
+response = requests.get(f"http://localhost:8000/api/v1/resources/{resource_id}")
+
+if response.status_code == 200:
+    resource = response.json()
+    print(f"Resource: {resource['name']}")
+    print(f"Type: {resource['type']}")
+    print(f"Wrapper: {resource['wrapper_id']}")
+else:
+    print(f"Error: {response.status_code}")
+```
+</CodeGroup>
+
+## Updating Resources
+
+### Full Update (PUT)
+
+Replace all resource fields:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "http://localhost:8000/api/v1/resources/507f1f77bcf86cd799439011" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Updated Water Quality Index",
+    "type": "sustainability_indicator"
+  }'
+```
+
+```python Python
+import requests
+
+resource_id = "507f1f77bcf86cd799439011"
+response = requests.put(
+    f"http://localhost:8000/api/v1/resources/{resource_id}",
+    json={
+        "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "name": "Updated Water Quality Index",
+        "type": "sustainability_indicator"
+    }
+)
+
+updated_resource = response.json()
+print(f"Updated: {updated_resource['name']}")
+```
+</CodeGroup>
+
+### Partial Update (PATCH)
+
+Update specific fields only:
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "http://localhost:8000/api/v1/resources/507f1f77bcf86cd799439011" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Water Quality - Updated"
+  }'
+```
+
+```python Python
+import requests
+
+resource_id = "507f1f77bcf86cd799439011"
+response = requests.patch(
+    f"http://localhost:8000/api/v1/resources/{resource_id}",
+    json={"name": "Water Quality - Updated"}
+)
+
+updated_resource = response.json()
+print(f"Updated name: {updated_resource['name']}")
+```
+</CodeGroup>
+
+<Note>
+  PATCH allows you to update only the fields you specify, while PUT requires all fields.
+</Note>
+
+## Deleting Resources
+
+Deleting a resource performs a soft delete and stops the associated wrapper:
+
+<Steps>
+  <Step title="Send Delete Request">
+    Request the resource deletion:
+    
+    <CodeGroup>
+    ```bash cURL
+    curl -X DELETE "http://localhost:8000/api/v1/resources/507f1f77bcf86cd799439011"
+    ```
+    
+    ```python Python
+    import requests
+    
+    resource_id = "507f1f77bcf86cd799439011"
+    response = requests.delete(f"http://localhost:8000/api/v1/resources/{resource_id}")
+    
+    if response.status_code == 200:
+        result = response.json()
+        print(f"Deleted: {result['deleted']}")
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Wrapper is Stopped">
+    The system automatically stops the wrapper process associated with this resource.
+  </Step>
+  
+  <Step title="Status Updated">
+    The wrapper status is updated to `stopped` and a log entry is added.
+  </Step>
+  
+  <Step title="Event Published">
+    A deletion event is published to the `resource_deleted_queue` for downstream services.
+  </Step>
+</Steps>
+
+**Response:**
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "deleted": true
+}
+```
+
+<Warning>
+  Resource deletion is permanent. The wrapper will be stopped and cannot be restarted without creating a new resource.
+</Warning>
+
+## Resource Lifecycle
+
+<Steps>
+  <Step title="Creation">
+    Resource is created (manually or automatically) and linked to a wrapper.
+  </Step>
+  
+  <Step title="Data Collection">
+    The wrapper executes and collects data for the resource. `startPeriod` and `endPeriod` track the data range.
+  </Step>
+  
+  <Step title="Updates">
+    Resource metadata can be updated as needed using PUT or PATCH requests.
+  </Step>
+  
+  <Step title="Monitoring">
+    Monitor resource health through the wrapper monitoring endpoints.
+  </Step>
+  
+  <Step title="Deletion">
+    Soft delete marks the resource as deleted and stops the wrapper process.
+  </Step>
+</Steps>
+
+## Error Handling
+
+### Common Errors
+
+| Status Code | Error | Solution |
+|-------------|-------|----------|
+| `400` | Invalid resource ID | Verify the resource ID is a valid MongoDB ObjectId |
+| `404` | Resource not found | Check that the resource exists and hasn't been deleted |
+| `400` | Wrapper not found | Ensure the wrapper_id references an existing wrapper |
+| `400` | Failed to create resource | Check request payload matches the schema |
+
+### Example Error Response
+
+```json
+{
+  "detail": "Resource not found"
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Auto-Creation" icon="wand-magic-sparkles">
+    Let the system create resources automatically when generating wrappers to maintain consistency.
+  </Card>
+  
+  <Card title="Descriptive Names" icon="tag">
+    Use clear, descriptive names that indicate the indicator type and data source.
+  </Card>
+  
+  <Card title="Monitor Wrappers" icon="heart-pulse">
+    Regularly check wrapper health to ensure continuous data collection.
+  </Card>
+  
+  <Card title="Handle Deletions Carefully" icon="triangle-exclamation">
+    Remember that deleting a resource stops the wrapper permanently.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generating Wrappers" icon="code" href="/guides/generating-wrappers">
+    Learn how to generate AI-powered wrappers for your resources
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Monitor wrapper health and view execution logs
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/api/resources/create">
+    View complete API documentation for resources
+  </Card>
+  
+  <Card title="Wrapper Execution" icon="play" href="/guides/wrapper-execution">
+    Understand wrapper execution modes and lifecycle
+  </Card>
+</CardGroup>

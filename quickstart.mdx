@@ -1,80 +1,461 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get Resource Service running in 5 minutes with Docker Compose
 ---
 
-## Get started in three steps
+## Get Started in 5 Minutes
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will get you up and running with Resource Service quickly. You'll launch the service, create your first resource, generate an AI-powered wrapper, and start collecting data.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  **What you'll need:**
+  - Docker and Docker Compose installed
+  - A Google Gemini API key ([get one here](https://aistudio.google.com/app/apikey))
+  - 5 minutes of your time
 </Note>
+
+## Launch the Service
+
+<Steps>
+  <Step title="Clone and Configure">
+    Clone the repository and set up your environment:
+
+    ```bash
+    git clone <repository-url>
+    cd resource-service
+    
+    # Copy environment template
+    cp .env.example .env
+    ```
+
+    Edit `.env` and add your Gemini API key:
+
+    ```bash .env
+    ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
+    GEMINI_API_KEY=your_gemini_api_key_here
+    GEMINI_MODEL_NAME=gemini-1.5-flash
+    ```
+
+    <Warning>
+      The `GEMINI_API_KEY` is required for AI-powered wrapper generation. Get your free API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+    </Warning>
+  </Step>
+
+  <Step title="Start Services">
+    Launch all services with Docker Compose:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Wait for services to be healthy (about 30 seconds):
+
+    ```bash
+    docker compose ps
+    ```
+
+    You should see both `resource-service` and `resource-mongo` as healthy.
+
+    <Tip>
+      The service runs on port 8080. Access the interactive API docs at [http://localhost:8080/docs](http://localhost:8080/docs)
+    </Tip>
+  </Step>
+
+  <Step title="Verify Health">
+    Check that the service is running:
+
+    ```bash
+    curl http://localhost:8080/health
+    ```
+
+    Expected response:
+    ```json
+    {
+      "message": "Hello from resource service!"
+    }
+    ```
+  </Step>
+</Steps>
+
+## Create Your First Resource
+
+Now let's create a sustainability indicator resource and generate an AI-powered data collection wrapper.
+
+<Steps>
+  <Step title="Upload a Data File (Optional)">
+    If you have a CSV or Excel file with sustainability data, upload it first:
+
+    ```bash
+    curl -X POST "http://localhost:8080/resources/wrappers/files/upload" \
+      -F "file=@your_data.csv"
+    ```
+
+    Response:
+    ```json
+    {
+      "file_id": "507f1f77bcf86cd799439011",
+      "filename": "your_data.csv",
+      "file_size": 15234,
+      "validation_status": "valid",
+      "preview_data": [
+        {"date": "2024-01-01", "value": 42.5},
+        {"date": "2024-01-02", "value": 43.1}
+      ],
+      "message": "File uploaded successfully"
+    }
+    ```
+
+    <Tip>
+      Save the `file_id` - you'll need it for wrapper generation. The preview shows the first few rows to verify the data structure.
+    </Tip>
+  </Step>
+
+  <Step title="Generate an API Wrapper">
+    Let's create a wrapper for an API data source. This example collects air quality data:
+
+    ```bash
+    curl -X POST "http://localhost:8080/resources/wrappers/generate" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "source_type": "API",
+        "source_config": {
+          "location": "https://api.example.com/air-quality",
+          "auth_type": "api_key",
+          "api_key": "your_api_key",
+          "api_key_header": "X-API-Key",
+          "timeout_seconds": 30,
+          "date_field": "timestamp",
+          "value_field": "pm25"
+        },
+        "metadata": {
+          "name": "PM2.5 Air Quality Index",
+          "domain": "Environment",
+          "subdomain": "Air Quality",
+          "description": "Fine particulate matter concentration in urban areas",
+          "unit": "μg/m³",
+          "source": "Environmental Protection Agency",
+          "scale": "City",
+          "governance_indicator": false,
+          "carrying_capacity": 35.0,
+          "periodicity": "hourly"
+        },
+        "auto_create_resource": true
+      }'
+    ```
+
+    <Accordion title="Generate a CSV Wrapper Instead">
+      To generate a wrapper for an uploaded CSV file:
+
+      ```bash
+      curl -X POST "http://localhost:8080/resources/wrappers/generate" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "source_type": "CSV",
+          "source_config": {
+            "file_id": "507f1f77bcf86cd799439011"
+          },
+          "metadata": {
+            "name": "Water Quality Index",
+            "domain": "Environment",
+            "subdomain": "Water Resources",
+            "description": "Monthly water quality measurements from local monitoring stations",
+            "unit": "WQI Score",
+            "source": "Municipal Water Authority",
+            "scale": "Regional",
+            "governance_indicator": false,
+            "periodicity": "monthly"
+          },
+          "auto_create_resource": true
+        }'
+      ```
+    </Accordion>
+
+    The service will use Gemini AI to generate a custom Python wrapper. Response:
+
+    ```json
+    {
+      "wrapper_id": "507f1f77bcf86cd799439012",
+      "resource_id": "507f1f77bcf86cd799439013",
+      "status": "completed",
+      "metadata": {
+        "name": "PM2.5 Air Quality Index",
+        "domain": "Environment",
+        "subdomain": "Air Quality",
+        "unit": "μg/m³",
+        "source": "Environmental Protection Agency"
+      },
+      "source_type": "API",
+      "created_at": "2026-03-03T10:00:00Z",
+      "phase": "historical"
+    }
+    ```
+
+    <Tip>
+      Save the `wrapper_id` - you'll use it to execute the wrapper and check its status.
+    </Tip>
+  </Step>
+
+  <Step title="Execute the Wrapper">
+    Start collecting data by executing the wrapper:
+
+    ```bash
+    curl -X POST "http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/execute"
+    ```
+
+    Response:
+    ```json
+    {
+      "wrapper_id": "507f1f77bcf86cd799439012",
+      "success": true,
+      "message": "Wrapper execution started in background",
+      "data_points_sent": null,
+      "execution_time": "2026-03-03T10:01:00Z"
+    }
+    ```
+
+    The wrapper will now:
+    1. **Historical Phase**: Collect all available historical data
+    2. **Continuous Phase**: Monitor for new data points
+    3. Send data to RabbitMQ for downstream processing
+  </Step>
+
+  <Step title="Monitor Wrapper Health">
+    Check the wrapper's execution status:
+
+    ```bash
+    curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/health
+    ```
+
+    Response:
+    ```json
+    {
+      "wrapper_id": "507f1f77bcf86cd799439012",
+      "health_status": "healthy",
+      "is_actively_executing": true
+    }
+    ```
+
+    View execution logs:
+    ```bash
+    curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/logs
+    ```
+
+    Get detailed monitoring information:
+    ```bash
+    curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/monitoring
+    ```
+
+    <Info>
+      Wrappers automatically restart after service restarts, resuming from where they left off using checkpoints.
+    </Info>
+  </Step>
+</Steps>
+
+## List Resources and Wrappers
+
+View all created resources and wrappers:
+
+<CodeGroup>
+
+```bash List All Resources
+curl "http://localhost:8080/resources/?skip=0&limit=10"
+```
+
+```bash Get Specific Resource
+curl http://localhost:8080/resources/507f1f77bcf86cd799439013
+```
+
+```bash List All Wrappers
+curl "http://localhost:8080/resources/wrappers/?skip=0&limit=10"
+```
+
+```bash Get Wrapper Details
+curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012
+```
+
+</CodeGroup>
+
+## Manage Wrapper Execution
+
+Control wrapper lifecycle with these endpoints:
+
+<CodeGroup>
+
+```bash Stop a Wrapper
+curl -X POST http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/stop
+```
+
+```bash Check Health Status
+curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/health
+```
+
+```bash View Logs (Last 200 Lines)
+curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/logs?limit=200
+```
+
+```bash Get Monitoring Details
+curl http://localhost:8080/resources/wrappers/507f1f77bcf86cd799439012/monitoring
+```
+
+</CodeGroup>
+
+## Interactive API Documentation
+
+Explore all available endpoints with the built-in Swagger UI:
+
+<Card title="Open API Documentation" icon="book-open" href="http://localhost:8080/docs">
+  Visit http://localhost:8080/docs for interactive API documentation with request/response examples and a built-in API client.
+</Card>
+
+Alternatively, use ReDoc for a different documentation view:
+<Card title="Open ReDoc" icon="file-lines" href="http://localhost:8080/redoc">
+  Visit http://localhost:8080/redoc for a clean, three-panel API documentation interface.
+</Card>
+
+## Common Operations
+
+<AccordionGroup>
+  <Accordion title="Update a Resource" icon="pen">
+    Use PUT to update a resource completely:
+
+    ```bash
+    curl -X PUT "http://localhost:8080/resources/507f1f77bcf86cd799439013" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "wrapper_id": "507f1f77bcf86cd799439012",
+        "name": "PM2.5 Air Quality Index - Updated",
+        "type": "air_quality"
+      }'
+    ```
+
+    Or use PATCH to update specific fields:
+
+    ```bash
+    curl -X PATCH "http://localhost:8080/resources/507f1f77bcf86cd799439013" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "PM2.5 AQI - Revised"}'
+    ```
+  </Accordion>
+
+  <Accordion title="Delete Resources" icon="trash">
+    Delete a resource:
+
+    ```bash
+    curl -X DELETE http://localhost:8080/resources/507f1f77bcf86cd799439013
+    ```
+
+    Response:
+    ```json
+    {
+      "id": "507f1f77bcf86cd799439013",
+      "deleted": true
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Delete Uploaded Files" icon="file-circle-xmark">
+    Remove uploaded files when no longer needed:
+
+    ```bash
+    curl -X DELETE http://localhost:8080/resources/wrappers/files/507f1f77bcf86cd799439011
+    ```
+
+    Response:
+    ```json
+    {
+      "message": "File deleted successfully"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="View Service Version" icon="code-branch">
+    Check the service version:
+
+    ```bash
+    curl http://localhost:8080/resources/version
+    ```
+
+    Response:
+    ```json
+    {
+      "service": "resource-service",
+      "version": "1.0.0"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation Guide"
+    icon="download"
+    href="/installation"
+  >
+    Learn about development setup, environment variables, and production deployment
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/resources/list"
+  >
+    Explore detailed API documentation for all endpoints and schemas
+  </Card>
+  <Card
+    title="Core Concepts"
+    icon="lightbulb"
+    href="/concepts/architecture"
+  >
+    Understand wrappers, resources, phases, and data collection patterns
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/deployment/configuration"
+  >
+    Advanced configuration options and environment variables
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Service won't start" icon="circle-exclamation">
+    Check Docker logs:
+    ```bash
+    docker compose logs resource-service
+    docker compose logs resource-mongo
+    ```
+
+    Common issues:
+    - Missing `GEMINI_API_KEY` in `.env`
+    - Port 8080 already in use
+    - MongoDB connection timeout
+  </Accordion>
+
+  <Accordion title="Wrapper generation fails" icon="triangle-exclamation">
+    Verify your Gemini API key is valid:
+    ```bash
+    docker compose logs resource-service | grep -i gemini
+    ```
+
+    Ensure your API key has proper permissions at [Google AI Studio](https://aistudio.google.com/app/apikey).
+  </Accordion>
+
+  <Accordion title="Wrapper not executing" icon="clock">
+    Check wrapper status:
+    ```bash
+    curl http://localhost:8080/resources/wrappers/{wrapper_id}
+    ```
+
+    If status is `error`, check the logs:
+    ```bash
+    curl http://localhost:8080/resources/wrappers/{wrapper_id}/logs
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  For production deployments, ensure you configure proper authentication, use environment-specific variables, and set up monitoring. See the [Installation Guide](/installation) for details.
+</Warning>

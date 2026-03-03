@@ -1,0 +1,102 @@
+---
+title: "Delete Resource"
+description: "Soft-delete a resource by ID"
+---
+
+## DELETE /resources/{resource_id}
+
+Soft-deletes a resource by marking it as deleted in the database. This operation also:
+- Stops the associated wrapper process if running
+- Updates the wrapper status to STOPPED
+- Publishes a message to the resource deletion queue for downstream processing
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Path Parameters
+
+<ParamField path="resource_id" type="string" required>
+  The unique identifier of the resource to delete (MongoDB ObjectId format)
+</ParamField>
+
+### Response
+
+Returns a deletion confirmation object.
+
+<ResponseField name="id" type="string" required>
+  The ID of the deleted resource
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean" required>
+  Confirmation that the resource was deleted (always true on success)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X DELETE "https://api.example.com/resources/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response
+
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "deleted": true
+}
+```
+
+### Error Responses
+
+<ResponseField name="400" type="Bad Request">
+  Invalid resource ID format
+</ResponseField>
+
+```json
+{
+  "detail": "Invalid resource ID"
+}
+```
+
+<ResponseField name="404" type="Not Found">
+  Resource not found or already deleted
+</ResponseField>
+
+```json
+{
+  "detail": "Resource not found"
+}
+```
+
+<ResponseField name="500" type="Internal Server Error">
+  Database operation failed
+</ResponseField>
+
+```json
+{
+  "detail": "Internal server error"
+}
+```
+
+### Side Effects
+
+When a resource is deleted, the following actions occur automatically:
+
+1. **Wrapper Process Management**: If the resource has an associated wrapper, the wrapper process is stopped
+2. **Wrapper Status Update**: The associated wrapper's status is updated to STOPPED with a timestamp
+3. **Execution Log**: An entry is added to the wrapper's execution log documenting the deletion
+4. **Message Queue**: A message is published to the resource deletion queue containing:
+   ```json
+   {
+     "resource_id": "507f1f77bcf86cd799439011",
+     "wrapper_id": "wrapper_123"
+   }
+   ```
+
+### Notes
+
+- This is a soft-delete operation. The resource record remains in the database with a `deleted: true` flag
+- Deleted resources will not appear in list or get operations
+- The deletion is irreversible through the API (requires direct database access to restore)

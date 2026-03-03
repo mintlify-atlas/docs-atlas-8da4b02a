@@ -1,0 +1,108 @@
+---
+title: Execute Wrapper
+description: Execute a generated wrapper to fetch and send data
+---
+
+## POST /resources/wrappers/{wrapper_id}/execute
+
+Execute a generated wrapper to fetch data from its configured source and send it to the destination. This endpoint triggers the wrapper's data collection and transmission process.
+
+### Authentication
+
+This endpoint requires authentication. Include your API key in the request headers.
+
+### Path Parameters
+
+<ParamField path="wrapper_id" type="string" required>
+  The unique identifier of the wrapper to execute
+</ParamField>
+
+### Response
+
+<ResponseField name="wrapper_id" type="string">
+  The wrapper ID that was executed
+</ResponseField>
+
+<ResponseField name="success" type="boolean">
+  Whether the execution completed successfully
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message describing the execution result
+</ResponseField>
+
+<ResponseField name="data_points_sent" type="integer">
+  Number of data points successfully transmitted (null if execution failed)
+</ResponseField>
+
+<ResponseField name="execution_time" type="string">
+  ISO 8601 timestamp when the execution completed
+</ResponseField>
+
+### Example Request
+
+```bash cURL
+curl -X POST https://api.example.com/resources/wrappers/550e8400-e29b-41d4-a716-446655440000/execute \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response (Success)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "success": true,
+  "message": "Wrapper executed successfully",
+  "data_points_sent": 127,
+  "execution_time": "2026-03-03T10:35:22Z"
+}
+```
+
+### Example Response (Failure)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "success": false,
+  "message": "Failed to connect to data source",
+  "data_points_sent": null,
+  "execution_time": "2026-03-03T10:35:22Z"
+}
+```
+
+### Error Responses
+
+<ResponseField name="400 Bad Request">
+  Wrapper execution error. Common causes:
+  - Wrapper not found
+  - Invalid wrapper configuration
+  - File not found for CSV/XLSX wrappers
+  - Data source connection failed
+  
+  ```json
+  {
+    "detail": "Execution error: Wrapper file not found"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="503 Service Unavailable">
+  Service unavailable during execution:
+  - Connection error to data source
+  - Timeout fetching data
+  - Network communication failure
+  
+  ```json
+  {
+    "detail": "Service unavailable: Connection timeout"
+  }
+  ```
+</ResponseField>
+
+### Behavior Notes
+
+- The endpoint updates the wrapper's status in the database based on execution results
+- For successful executions, the status is updated to `completed`
+- For failed executions, the status is updated to `error` with an error message
+- Execution logs are appended to the wrapper's execution_log array
+- The wrapper's last_data_sent timestamp and data_points_count are updated on success

@@ -1,0 +1,153 @@
+---
+title: Upload File
+description: Upload a CSV or XLSX file for wrapper generation
+---
+
+## POST /resources/wrappers/files/upload
+
+Upload a CSV, XLSX, or XLS file to the Resource Service for wrapper generation. The service validates the file format and content, returning a unique file ID that can be used in subsequent wrapper generation requests.
+
+### Authentication
+
+No authentication required.
+
+### Request
+
+#### Headers
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `multipart/form-data`
+</ParamField>
+
+#### Body Parameters
+
+<ParamField body="file" type="file" required>
+  The file to upload. Must be one of:
+  - CSV file (`.csv`)
+  - Excel file (`.xlsx`, `.xls`)
+  
+  **Maximum file size:** 50 MB
+  
+  **Content validation:**
+  - File must not be empty
+  - File must have at least 2 columns for time series data
+</ParamField>
+
+### Response
+
+<ResponseField name="file_id" type="string" required>
+  Unique identifier for the uploaded file. Use this ID when generating wrappers.
+</ResponseField>
+
+<ResponseField name="filename" type="string" required>
+  Original filename as provided during upload.
+</ResponseField>
+
+<ResponseField name="file_size" type="integer" required>
+  File size in bytes.
+</ResponseField>
+
+<ResponseField name="preview_data" type="string">
+  Sample of the file content (first 5 rows) for preview purposes.
+</ResponseField>
+
+<ResponseField name="validation_status" type="string" required>
+  File validation status. Possible values:
+  - `valid` - File passed all validation checks
+  - `invalid` - File failed validation
+  - `pending` - Validation in progress
+</ResponseField>
+
+<ResponseField name="validation_errors" type="array">
+  List of validation error messages if the file is invalid. Only present when validation_status is `invalid`.
+  
+  <ResponseField name="item" type="string">
+    Error message describing the validation failure.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable message describing the upload result.
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST https://api.example.com/resources/wrappers/files/upload \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/your/data.csv"
+```
+
+### Example Response
+
+#### Success (Valid File)
+
+```json
+{
+  "file_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+  "filename": "sales_data.csv",
+  "file_size": 245760,
+  "preview_data": "timestamp          value\n2024-01-01 00:00:00  100.5\n2024-01-01 01:00:00  102.3\n2024-01-01 02:00:00  98.7\n2024-01-01 03:00:00  105.2\n2024-01-01 04:00:00  99.8",
+  "validation_status": "valid",
+  "validation_errors": null,
+  "message": "File uploaded successfully"
+}
+```
+
+#### Success (Invalid File)
+
+```json
+{
+  "file_id": "b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7",
+  "filename": "empty_file.csv",
+  "file_size": 128,
+  "preview_data": null,
+  "validation_status": "invalid",
+  "validation_errors": [
+    "File is empty",
+    "File must have at least 2 columns for time series data"
+  ],
+  "message": "File uploaded but has validation errors"
+}
+```
+
+### Error Responses
+
+#### 400 Bad Request
+
+**No file provided:**
+```json
+{
+  "detail": "No file provided"
+}
+```
+
+**Unsupported file type:**
+```json
+{
+  "detail": "File type not supported. Allowed: .csv, .xlsx, .xls"
+}
+```
+
+**File too large:**
+```json
+{
+  "detail": "File too large. Maximum size: 50.0MB"
+}
+```
+
+#### 500 Internal Server Error
+
+**Upload failed:**
+```json
+{
+  "detail": "Upload failed: <error message>"
+}
+```
+
+**File processing error:**
+```json
+{
+  "detail": "File upload failed: <error message>"
+}
+```

@@ -1,0 +1,449 @@
+---
+title: File Upload for Wrapper Generation
+description: Upload and validate CSV/XLSX files for AI-powered wrapper generation
+---
+
+## Overview
+
+Before generating wrappers from file-based data sources, you need to upload your CSV or Excel files to the Resource Service. The system validates the files, extracts preview data, and returns a `file_id` that you'll use for wrapper generation.
+
+## Supported File Types
+
+<CardGroup cols={3}>
+  <Card title="CSV" icon="file-csv">
+    Comma-separated values (`.csv`)
+  </Card>
+  
+  <Card title="XLSX" icon="file-excel">
+    Excel 2007+ format (`.xlsx`)
+  </Card>
+  
+  <Card title="XLS" icon="file-excel">
+    Legacy Excel format (`.xls`)
+  </Card>
+</CardGroup>
+
+## File Requirements
+
+<Warning>
+  Files must meet these requirements to be accepted:
+  - Maximum file size: 50 MB
+  - Minimum 2 columns (for time-series data)
+  - Valid CSV or Excel format
+  - At least one row of data
+</Warning>
+
+## Uploading a File
+
+### Using cURL
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/files/upload" \
+  -F "file=@/path/to/carbon_emissions.csv"
+```
+
+### Using Python
+
+```python
+import requests
+
+with open('carbon_emissions.csv', 'rb') as f:
+    files = {'file': ('carbon_emissions.csv', f, 'text/csv')}
+    response = requests.post(
+        'http://localhost:8000/api/v1/files/upload',
+        files=files
+    )
+
+if response.status_code == 200:
+    upload_result = response.json()
+    print(f"File ID: {upload_result['file_id']}")
+    print(f"Status: {upload_result['validation_status']}")
+    print(f"\nPreview:\n{upload_result['preview_data']}")
+else:
+    print(f"Upload failed: {response.json()['detail']}")
+```
+
+### Using JavaScript (Browser)
+
+```javascript
+const uploadFile = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch('http://localhost:8000/api/v1/files/upload', {
+    method: 'POST',
+    body: formData
+  });
+
+  if (response.ok) {
+    const result = await response.json();
+    console.log('File ID:', result.file_id);
+    console.log('Validation:', result.validation_status);
+    console.log('Preview:', result.preview_data);
+    return result;
+  } else {
+    const error = await response.json();
+    throw new Error(error.detail);
+  }
+};
+
+// Usage with file input
+document.querySelector('#fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  try {
+    const result = await uploadFile(file);
+    // Use result.file_id for wrapper generation
+  } catch (error) {
+    console.error('Upload failed:', error.message);
+  }
+});
+```
+
+## Upload Response
+
+**Successful Upload:**
+
+```json
+{
+  "file_id": "123e4567-e89b-12d3-a456-426614174000",
+  "filename": "carbon_emissions.csv",
+  "file_size": 15420,
+  "preview_data": "year  emissions\n2020  5234.2\n2021  5198.3\n2022  5087.1\n2023  4956.8\n2024  4823.5",
+  "validation_status": "valid",
+  "validation_errors": null,
+  "message": "File uploaded successfully"
+}
+```
+
+**Upload with Validation Errors:**
+
+```json
+{
+  "file_id": "987f6543-e21b-43d1-a654-426614174001",
+  "filename": "invalid_data.csv",
+  "file_size": 234,
+  "preview_data": null,
+  "validation_status": "invalid",
+  "validation_errors": [
+    "File must have at least 2 columns for time series data"
+  ],
+  "message": "File uploaded but has validation errors"
+}
+```
+
+<Note>
+  Even files with validation errors are stored and assigned a `file_id`. You can inspect the errors and fix the data before re-uploading.
+</Note>
+
+## File Validation
+
+The system performs automatic validation:
+
+<Steps>
+  <Step title="File Type Check">
+    Verifies the file extension and content type are supported.
+  </Step>
+  
+  <Step title="Size Check">
+    Ensures file size doesn't exceed 50 MB.
+  </Step>
+  
+  <Step title="Content Parsing">
+    Attempts to parse the file as CSV or Excel.
+  </Step>
+  
+  <Step title="Structure Validation">
+    Checks for minimum 2 columns and at least one data row.
+  </Step>
+  
+  <Step title="Preview Generation">
+    Extracts first 5 rows for preview display.
+  </Step>
+</Steps>
+
+### Validation Statuses
+
+| Status | Description |
+|--------|-------------|
+| `valid` | File passed all validation checks |
+| `invalid` | File has validation errors (see `validation_errors`) |
+| `pending` | Validation in progress (rare, for very large files) |
+
+## Retrieving File Information
+
+Get details about an uploaded file:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/files/123e4567-e89b-12d3-a456-426614174000"
+```
+
+```python Python
+import requests
+
+file_id = "123e4567-e89b-12d3-a456-426614174000"
+response = requests.get(f"http://localhost:8000/api/v1/files/{file_id}")
+
+if response.status_code == 200:
+    file_info = response.json()
+    print(f"Filename: {file_info['filename']}")
+    print(f"Size: {file_info['file_size']} bytes")
+    print(f"Status: {file_info['validation_status']}")
+    print(f"\nPreview:\n{file_info['preview_data']}")
+else:
+    print("File not found")
+```
+</CodeGroup>
+
+## Listing Uploaded Files
+
+View all uploaded files (useful for debugging):
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/files/"
+```
+
+```python Python
+import requests
+
+response = requests.get("http://localhost:8000/api/v1/files/")
+files = response.json()
+
+print(f"Total files: {files['count']}")
+for file in files['files']:
+    print(f"- {file['filename']} ({file['file_id']}): {file['validation_status']}")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "files": [
+    {
+      "file_id": "123e4567-e89b-12d3-a456-426614174000",
+      "filename": "carbon_emissions.csv",
+      "file_size": 15420,
+      "content_type": "text/csv",
+      "upload_timestamp": "2026-03-03T10:15:00Z",
+      "preview_data": "...",
+      "validation_status": "valid",
+      "validation_errors": null
+    },
+    {
+      "file_id": "987f6543-e21b-43d1-a654-426614174001",
+      "filename": "energy_data.xlsx",
+      "file_size": 28630,
+      "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "upload_timestamp": "2026-03-03T09:45:00Z",
+      "preview_data": "...",
+      "validation_status": "valid",
+      "validation_errors": null
+    }
+  ],
+  "count": 2
+}
+```
+
+<Note>
+  The `file_path` field is excluded from list responses for security. It's only available internally.
+</Note>
+
+## Deleting Uploaded Files
+
+Remove an uploaded file from storage:
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "http://localhost:8000/api/v1/files/123e4567-e89b-12d3-a456-426614174000"
+```
+
+```python Python
+import requests
+
+file_id = "123e4567-e89b-12d3-a456-426614174000"
+response = requests.delete(f"http://localhost:8000/api/v1/files/{file_id}")
+
+if response.status_code == 200:
+    print("File deleted successfully")
+else:
+    print("File not found")
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "message": "File deleted successfully"
+}
+```
+
+<Warning>
+  Deleting a file does NOT delete wrappers that were generated from it. Wrappers store their own copy of the file path.
+</Warning>
+
+## Using Files for Wrapper Generation
+
+Once uploaded, use the `file_id` to generate a wrapper:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/wrappers/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_type": "CSV",
+    "source_config": {
+      "file_id": "123e4567-e89b-12d3-a456-426614174000"
+    },
+    "metadata": {
+      "name": "Carbon Emissions",
+      "domain": "Environment",
+      "subdomain": "Climate",
+      "description": "Annual CO2 emissions",
+      "unit": "tons",
+      "source": "EPA",
+      "scale": "National",
+      "governance_indicator": false,
+      "periodicity": "annual"
+    }
+  }'
+```
+
+<Tip>
+  You don't need to provide the `location` field - the backend automatically resolves the `file_id` to the internal file path.
+</Tip>
+
+## CSV Format Guidelines
+
+For best results, structure your CSV files with:
+
+1. **Header row** with column names
+2. **Date/time column** for temporal data
+3. **Value column(s)** with numeric data
+4. **Consistent formatting** (dates, numbers, missing values)
+
+**Example CSV:**
+```csv
+year,emissions,temperature_change
+2020,5234.2,1.02
+2021,5198.3,1.09
+2022,5087.1,1.15
+2023,4956.8,1.17
+2024,4823.5,1.24
+```
+
+## Excel Format Guidelines
+
+For Excel files:
+
+1. **Use the first sheet** for data (or specify sheet name)
+2. **Include headers** in the first row
+3. **Avoid merged cells** in data area
+4. **Use consistent data types** per column
+5. **Remove formulas** - values only
+
+<Tip>
+  Both `.xlsx` (Excel 2007+) and `.xls` (legacy) formats are supported, but `.xlsx` is recommended for better compatibility.
+</Tip>
+
+## Error Handling
+
+### Common Upload Errors
+
+<AccordionGroup>
+  <Accordion title="File too large (400)">
+    **Error:**
+    ```json
+    {
+      "detail": "File too large. Maximum size: 50.0MB"
+    }
+    ```
+    
+    **Solution:** Compress the file, remove unnecessary data, or split into multiple files.
+  </Accordion>
+  
+  <Accordion title="Unsupported file type (400)">
+    **Error:**
+    ```json
+    {
+      "detail": "File type not supported. Allowed: .csv, .xlsx, .xls"
+    }
+    ```
+    
+    **Solution:** Convert your file to CSV or Excel format.
+  </Accordion>
+  
+  <Accordion title="File parsing error (500)">
+    **Error:**
+    ```json
+    {
+      "detail": "File upload failed: Error reading file: File appears to be corrupted"
+    }
+    ```
+    
+    **Solution:** Verify file isn't corrupted. Try opening in Excel/Numbers and re-saving.
+  </Accordion>
+  
+  <Accordion title="No file provided (400)">
+    **Error:**
+    ```json
+    {
+      "detail": "No file provided"
+    }
+    ```
+    
+    **Solution:** Ensure you're sending the file as multipart/form-data with field name "file".
+  </Accordion>
+</AccordionGroup>
+
+## Storage Details
+
+Uploaded files are stored:
+
+- **Location:** `/app/uploads/{file_id}/{filename}`
+- **Organization:** Each file gets its own subdirectory by `file_id`
+- **Metadata:** Stored in MongoDB `uploaded_files` collection
+- **Retention:** Files persist until explicitly deleted
+
+<Note>
+  File paths are internal and not exposed in API responses for security. Use the `file_id` to reference files.
+</Note>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Validate Before Upload" icon="check-double">
+    Check file format, size, and data quality locally before uploading.
+  </Card>
+  
+  <Card title="Use Descriptive Filenames" icon="file-signature">
+    Name files clearly to identify data source and content.
+  </Card>
+  
+  <Card title="Review Preview Data" icon="eye">
+    Always check the preview_data in the response to verify correct parsing.
+  </Card>
+  
+  <Card title="Clean Up Old Files" icon="trash">
+    Delete files you no longer need to save storage space.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generate Wrappers" icon="wand-magic-sparkles" href="/guides/generating-wrappers">
+    Use your uploaded file to generate an AI-powered wrapper
+  </Card>
+  
+  <Card title="Wrapper Execution" icon="play" href="/guides/wrapper-execution">
+    Learn how wrappers execute and process file data
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/api/files/upload">
+    View complete file upload API documentation
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line" href="/guides/monitoring">
+    Monitor wrapper health after generation
+  </Card>
+</CardGroup>

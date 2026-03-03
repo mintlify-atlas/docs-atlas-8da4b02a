@@ -1,0 +1,58 @@
+---
+title: Delete File
+description: Delete an uploaded file from storage
+---
+
+## DELETE /resources/wrappers/files/{file_id}
+
+Delete a previously uploaded file from both the database and disk storage. This operation is permanent and cannot be undone.
+
+### Authentication
+
+No authentication required.
+
+### Path Parameters
+
+<ParamField path="file_id" type="string" required>
+  The unique identifier of the uploaded file to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string" required>
+  Success message confirming the file was deleted.
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X DELETE https://api.example.com/resources/wrappers/files/a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6
+```
+
+### Example Response
+
+#### Success
+
+```json
+{
+  "message": "File deleted successfully"
+}
+```
+
+### Error Responses
+
+#### 404 Not Found
+
+**File not found:**
+```json
+{
+  "detail": "File not found"
+}
+```
+
+### Notes
+
+- The deletion operation removes the file from both the database and disk storage
+- If the file directory becomes empty after deletion, it will also be removed
+- If a wrapper is currently using this file, deletion may cause the wrapper to fail
+- There is no recovery option once a file is deleted

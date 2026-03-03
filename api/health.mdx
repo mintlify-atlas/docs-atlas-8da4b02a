@@ -1,0 +1,50 @@
+---
+title: Health Check
+description: Check the health status of the Resource Service
+---
+
+## GET /health
+
+Simple health check endpoint to verify that the Resource Service is running and responding to requests. This endpoint is useful for monitoring, load balancers, and orchestration systems.
+
+### Authentication
+
+No authentication required.
+
+### Response
+
+<ResponseField name="message" type="string" required>
+  A greeting message indicating the service is operational.
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET https://api.example.com/health
+```
+
+### Example Response
+
+#### Success
+
+```json
+{
+  "message": "Hello from resource service!"
+}
+```
+
+### Status Codes
+
+<ResponseField name="200 OK" type="status">
+  The service is running normally and accepting requests.
+</ResponseField>
+
+### Notes
+
+- This endpoint always returns a 200 status code if the service is running
+- It does not check the health of dependent services (database, RabbitMQ, etc.)
+- For production monitoring, consider implementing additional health checks that verify:
+  - Database connectivity
+  - Message queue connectivity
+  - Disk space availability
+  - Memory usage

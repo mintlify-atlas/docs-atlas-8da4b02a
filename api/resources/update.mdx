@@ -1,0 +1,214 @@
+---
+title: "Update Resource"
+description: "Update a resource using PUT or PATCH"
+---
+
+## PUT /resources/{resource_id}
+
+Completely replaces a resource with new data. All fields must be provided.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Path Parameters
+
+<ParamField path="resource_id" type="string" required>
+  The unique identifier of the resource to update (MongoDB ObjectId format)
+</ParamField>
+
+### Request Body
+
+<ParamField body="wrapper_id" type="string" required>
+  ID of the wrapper to associate with this resource
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name of the resource
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Type of the resource
+</ParamField>
+
+### Response
+
+Returns the updated resource object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the resource (MongoDB ObjectId)
+</ResponseField>
+
+<ResponseField name="wrapper_id" type="string" required>
+  ID of the wrapper associated with this resource
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the resource
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of the resource
+</ResponseField>
+
+<ResponseField name="startPeriod" type="datetime" optional>
+  Start period timestamp for the resource
+</ResponseField>
+
+<ResponseField name="endPeriod" type="datetime" optional>
+  End period timestamp for the resource
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.example.com/resources/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "wrapper_id": "wrapper_123",
+    "name": "Production Database - Updated",
+    "type": "postgresql"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "wrapper_id": "wrapper_123",
+  "name": "Production Database - Updated",
+  "type": "postgresql",
+  "startPeriod": "2024-01-15T10:30:00Z",
+  "endPeriod": null
+}
+```
+
+---
+
+## PATCH /resources/{resource_id}
+
+Partially updates a resource. Only the fields provided in the request body will be updated.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Path Parameters
+
+<ParamField path="resource_id" type="string" required>
+  The unique identifier of the resource to update (MongoDB ObjectId format)
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string" optional>
+  Name of the resource
+</ParamField>
+
+<ParamField body="type" type="string" optional>
+  Type of the resource
+</ParamField>
+
+### Response
+
+Returns the updated resource object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the resource (MongoDB ObjectId)
+</ResponseField>
+
+<ResponseField name="wrapper_id" type="string" required>
+  ID of the wrapper associated with this resource
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the resource
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of the resource
+</ResponseField>
+
+<ResponseField name="startPeriod" type="datetime" optional>
+  Start period timestamp for the resource
+</ResponseField>
+
+<ResponseField name="endPeriod" type="datetime" optional>
+  End period timestamp for the resource
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PATCH "https://api.example.com/resources/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Database - Patched"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "wrapper_id": "wrapper_123",
+  "name": "Production Database - Patched",
+  "type": "database",
+  "startPeriod": "2024-01-15T10:30:00Z",
+  "endPeriod": null
+}
+```
+
+---
+
+## Error Responses (Both PUT and PATCH)
+
+<ResponseField name="400" type="Bad Request">
+  Invalid resource ID format
+</ResponseField>
+
+```json
+{
+  "detail": "Invalid resource ID"
+}
+```
+
+<ResponseField name="404" type="Not Found">
+  Resource not found or has been deleted
+</ResponseField>
+
+```json
+{
+  "detail": "Resource not found"
+}
+```
+
+<ResponseField name="422" type="Validation Error">
+  Invalid request body (missing required fields for PUT or incorrect types)
+</ResponseField>
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "name"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+
+<ResponseField name="500" type="Internal Server Error">
+  Database operation failed
+</ResponseField>
+
+```json
+{
+  "detail": "Internal server error"
+}
+```

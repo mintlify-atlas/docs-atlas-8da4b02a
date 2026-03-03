@@ -1,0 +1,307 @@
+---
+title: System Architecture
+description: Understanding the Resource Service's architecture, components, and how they interact
+---
+
+## Overview
+
+The Resource Service is a FastAPI-based microservice that manages sustainability indicators through an automated wrapper generation and execution system. It leverages AI to dynamically create data collection wrappers and manages their lifecycle from creation to continuous execution.
+
+## Core Components
+
+The system is built on several key architectural components that work together to provide a complete data collection and management solution.
+
+### 1. FastAPI Application Layer
+
+The main application entry point (`app/main.py`) orchestrates the service lifecycle:
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from routes import router as api_router
+from dependencies.rabbitmq import rabbitmq_client
+
+app = FastAPI()
+app.include_router(api_router)
+```
+
+<Info>
+The application uses an `asynccontextmanager` lifespan to handle startup and shutdown events, ensuring proper initialization and cleanup of resources.
+</Info>
+
+**Key Responsibilities:**
+- CORS configuration for cross-origin requests
+- API route registration
+- Lifecycle management (startup/shutdown)
+- Dependency injection setup
+
+### 2. Database Layer (MongoDB)
+
+MongoDB stores all persistent data including resources, wrappers, and execution metadata.
+
+**Primary Collections:**
+
+<AccordionGroup>
+  <Accordion title="resources - Resource Metadata">
+    Stores information about sustainability indicators:
+    - `wrapper_id`: Associated wrapper identifier
+    - `name`: Resource display name
+    - `type`: Resource classification
+    - `startPeriod`: Earliest data point timestamp
+    - `endPeriod`: Latest data point timestamp
+    - `deleted`: Soft delete flag
+  </Accordion>
+
+  <Accordion title="generated_wrappers - Wrapper State">
+    Manages wrapper lifecycle and configuration:
+    - `wrapper_id`: Unique identifier (UUID)
+    - `status`: Current execution state
+    - `generated_code`: AI-generated Python code
+    - `source_type`: Data source (API, CSV, XLSX)
+    - `metadata`: Indicator metadata
+    - `execution_log`: Historical events
+    - `high_water_mark/low_water_mark`: Checkpoint timestamps
+  </Accordion>
+</AccordionGroup>
+
+### 3. Message Queue (RabbitMQ)
+
+RabbitMQ provides asynchronous task processing and inter-service communication.
+
+```python
+class RabbitMQClient:
+    def __init__(self, url: str, pool_size: int = 5):
+        self.url = url
+        self.pool_size = pool_size
+        self.connection = None
+        self.channel_pool = None
+```
+
+**Queue Types:**
+
+| Queue Name | Purpose | Message Format |
+|------------|---------|----------------|
+| `wrapper_creation_queue` | Async wrapper generation tasks | `{"wrapper_id": "uuid"}` |
+| `resource_data` | Data points from wrappers | `{"resource_id": "id", "points": [...]}` |
+| `resource_deleted` | Resource deletion notifications | `{"resource_id": "id", "wrapper_id": "uuid"}` |
+| `collected_data` | Raw collected data | Source-specific formats |
+
+<Note>
+The RabbitMQ client uses a channel pool pattern (default 5 channels) to efficiently handle concurrent message publishing and consumption.
+</Note>
+
+### 4. AI Wrapper Generator
+
+The `WrapperGenerator` service uses Google's Gemini AI to create customized data collection wrappers.
+
+```python
+class WrapperGenerator:
+    def __init__(
+        self,
+        gemini_api_key: str,
+        rabbitmq_url: str,
+        debug_mode: bool = False,
+        model_name: str = "gemini-2.5-flash"
+    ):
+        self.client = genai.Client(api_key=gemini_api_key)
+        self.model_name = model_name
+        self.prompt_manager = PromptManager()
+```
+
+**Generation Process:**
+1. Extract sample data from source (CSV/XLSX/API)
+2. Build contextual prompt with indicator metadata
+3. Call Gemini with tool support (for API sources)
+4. Validate generated Python code
+5. Retry on linting errors
+6. Save to `/app/generated_wrappers/{wrapper_id}.py`
+
+<Warning>
+The generator includes automatic code validation to prevent syntax errors and placeholder code from being saved. If validation fails, the system automatically retries with error feedback to the AI.
+</Warning>
+
+### 5. Wrapper Process Manager
+
+Manages the execution lifecycle of generated wrappers as separate Python processes.
+
+**Capabilities:**
+- Launch wrappers as background processes
+- Monitor process health and status
+- Stop running wrappers
+- Resume execution after service restart
+- Track execution metrics
+
+### 6. Resource Service
+
+Provides CRUD operations for resources with wrapper integration.
+
+```python
+async def create_resource(resource_data: ResourceCreate) -> Optional[dict]:
+    wrapper_id = resource_data.wrapper_id
+    
+    # Validate wrapper exists
+    wrapper = await db.generated_wrappers.find_one({"wrapper_id": wrapper_id})
+    if not wrapper:
+        raise ValueError(f"Wrapper with ID '{wrapper_id}' does not exist")
+    
+    # Create resource
+    resource_dict = deserialize(resource_data.dict())
+    resource_dict["deleted"] = False
+    resource_dict["startPeriod"] = None
+    resource_dict["endPeriod"] = None
+    result = await db.resources.insert_one(resource_dict)
+```
+
+## Component Interaction Flow
+
+### Wrapper Creation Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant DB
+    participant Queue
+    participant Generator
+    participant Runner
+
+    Client->>API: POST /wrappers (request)
+    API->>DB: Insert wrapper (PENDING)
+    API->>DB: Create resource
+    API->>Queue: Publish wrapper_id
+    API-->>Client: 202 Accepted
+    
+    Queue->>Generator: Consume wrapper_id
+    Generator->>DB: Update (GENERATING)
+    Generator->>Generator: Call Gemini AI
+    Generator->>DB: Save generated_code
+    Generator->>Runner: Execute wrapper
+    Runner->>DB: Update (EXECUTING)
+```
+
+### Data Collection Flow
+
+```mermaid
+sequenceDiagram
+    participant Wrapper
+    participant RabbitMQ
+    participant DataService
+    participant ResourceDB
+
+    loop Continuous Collection
+        Wrapper->>Wrapper: Fetch new data
+        Wrapper->>RabbitMQ: Publish data points
+        Wrapper->>ResourceDB: Update checkpoints
+        RabbitMQ->>DataService: Route to data service
+        DataService->>DataService: Store/Process
+    end
+```
+
+## Configuration
+
+The service uses Pydantic Settings for configuration management:
+
+```python
+class Settings(BaseSettings):
+    # Database
+    MONGO_URI: str = "mongodb://localhost:27017"
+    
+    # Message Queue
+    RABBITMQ_URL: str = "amqp://guest:guest@rabbitmq/"
+    
+    # AI Generation
+    GEMINI_API_KEY: str
+    GEMINI_MODEL_NAME: str = "gemini-1.5-flash"
+    
+    # Application
+    ORIGINS: str = "localhost"
+```
+
+<Tip>
+All settings can be overridden via environment variables. See the `.env.example` file for a complete list of available configuration options.
+</Tip>
+
+## Docker Deployment
+
+The service is containerized with Docker Compose:
+
+```yaml
+services:
+  resource-service:
+    build: .
+    environment:
+      - MONGO_URI=mongodb://resource-mongo:27017/resources
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - resource_generated_wrappers:/app/generated_wrappers
+      - resource_wrapper_logs:/app/wrapper_logs
+      - resource_prompts:/app/prompts
+    networks:
+      - resource-network
+
+  resource-mongo:
+    image: mongo:latest
+    volumes:
+      - resource_db:/data/db
+    networks:
+      - resource-network
+```
+
+**Persistent Volumes:**
+- `resource_generated_wrappers`: Stores generated wrapper Python files
+- `resource_wrapper_logs`: Execution logs for debugging
+- `resource_prompts`: AI prompt/response debug data
+- `resource_db`: MongoDB data directory
+
+## Health Monitoring
+
+The service includes comprehensive health checks:
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await rabbitmq_client.connect()
+    await rabbitmq_client.start_consumers()
+    await wrapper_process_manager.start_monitoring()
+    await wrapper_service.restart_executing_wrappers()
+    
+    try:
+        yield
+    finally:
+        # Shutdown
+        await wrapper_process_manager.stop_monitoring()
+        await rabbitmq_client.close()
+```
+
+<Check>
+The service automatically restarts continuous wrappers that were executing before a service restart, ensuring no data collection gaps.
+</Check>
+
+## API Structure
+
+Routes are organized by domain:
+
+```python
+router.include_router(resource_router, prefix="/resources")
+router.include_router(wrapper_router, prefix="/resources/wrappers")
+router.include_router(file_router, prefix="/resources/wrappers/files")
+router.include_router(health_router, prefix="/health")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Resources" icon="database" href="/concepts/resources">
+    Learn about resource structure and management
+  </Card>
+  <Card title="Wrappers" icon="code" href="/concepts/wrappers">
+    Understand wrapper generation and execution
+  </Card>
+  <Card title="Data Sources" icon="plug" href="/concepts/data-sources">
+    Explore supported data source types
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/resources/list">
+    View complete API documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,239 @@
+---
+title: Get Wrapper Details
+description: Get detailed information about a specific wrapper
+---
+
+## GET /resources/wrappers/{wrapper_id}
+
+Retrieve detailed information about a specific wrapper by its ID. This endpoint returns the complete wrapper configuration, status, execution history, and monitoring data.
+
+### Authentication
+
+This endpoint requires authentication. Include your API key in the request headers.
+
+### Path Parameters
+
+<ParamField path="wrapper_id" type="string" required>
+  The unique identifier of the wrapper to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="wrapper_id" type="string">
+  Unique identifier for the wrapper
+</ResponseField>
+
+<ResponseField name="resource_id" type="string">
+  Associated resource ID (if created)
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Indicator metadata describing the sustainability metric.
+  
+  <Expandable title="Metadata Properties">
+    <ResponseField name="name" type="string">
+      Name of the sustainability indicator
+    </ResponseField>
+    <ResponseField name="domain" type="string">
+      Domain (e.g., Environment, Social)
+    </ResponseField>
+    <ResponseField name="subdomain" type="string">
+      Subdomain classification
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Detailed description of the indicator
+    </ResponseField>
+    <ResponseField name="unit" type="string">
+      Unit of measurement
+    </ResponseField>
+    <ResponseField name="source" type="string">
+      Data source name
+    </ResponseField>
+    <ResponseField name="scale" type="string">
+      Scale (e.g., National, Regional)
+    </ResponseField>
+    <ResponseField name="governance_indicator" type="boolean">
+      Whether this is a governance indicator
+    </ResponseField>
+    <ResponseField name="carrying_capacity" type="number">
+      Maximum capacity value (optional)
+    </ResponseField>
+    <ResponseField name="periodicity" type="string">
+      Data collection frequency
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="source_type" type="string">
+  Type of data source: `API`, `CSV`, or `XLSX`
+</ResponseField>
+
+<ResponseField name="source_config" type="object">
+  Source-specific configuration details (structure varies by source_type)
+</ResponseField>
+
+<ResponseField name="generated_code" type="string">
+  Generated wrapper code (null if not yet generated)
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of creation
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of last update
+</ResponseField>
+
+<ResponseField name="completed_at" type="string">
+  ISO 8601 timestamp of completion (null if not completed)
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `pending`, `generating`, `creating_resource`, `executing`, `stopped`, `completed`, or `error`
+</ResponseField>
+
+<ResponseField name="error_message" type="string">
+  Error message if status is `error`
+</ResponseField>
+
+<ResponseField name="execution_log" type="array">
+  Array of execution log messages
+</ResponseField>
+
+<ResponseField name="last_health_check" type="string">
+  ISO 8601 timestamp of last health check
+</ResponseField>
+
+<ResponseField name="last_data_sent" type="string">
+  ISO 8601 timestamp of last data transmission
+</ResponseField>
+
+<ResponseField name="data_points_count" type="integer">
+  Number of data points processed
+</ResponseField>
+
+<ResponseField name="monitoring_details" type="object">
+  Type-specific monitoring information (varies by wrapper type)
+</ResponseField>
+
+<ResponseField name="phase" type="string">
+  Current execution phase: `historical` or `continuous`
+</ResponseField>
+
+<ResponseField name="high_water_mark" type="string">
+  Newest data point timestamp ever sent (for resumable execution)
+</ResponseField>
+
+<ResponseField name="low_water_mark" type="string">
+  Oldest data point timestamp ever sent (for resumable execution)
+</ResponseField>
+
+<ResponseField name="execution_result" type="object">
+  Result of the last execution (if available).
+  
+  <Expandable title="Execution Result Properties">
+    <ResponseField name="wrapper_id" type="string">
+      The wrapper ID that was executed
+    </ResponseField>
+    <ResponseField name="success" type="boolean">
+      Whether the execution completed successfully
+    </ResponseField>
+    <ResponseField name="message" type="string">
+      Human-readable message describing the execution result
+    </ResponseField>
+    <ResponseField name="data_points_sent" type="integer">
+      Number of data points successfully transmitted
+    </ResponseField>
+    <ResponseField name="execution_time" type="string">
+      ISO 8601 timestamp when the execution completed
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash cURL
+curl -X GET https://api.example.com/resources/wrappers/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "resource_id": "res_123456789",
+  "metadata": {
+    "name": "Average Temperature",
+    "domain": "Environment",
+    "subdomain": "Climate",
+    "description": "Average daily temperature in degrees Celsius",
+    "unit": "°C",
+    "source": "National Climate Service",
+    "scale": "National",
+    "governance_indicator": false,
+    "carrying_capacity": null,
+    "periodicity": "Daily"
+  },
+  "source_type": "API",
+  "source_config": {
+    "location": "https://data-api.example.com/climate/temperature",
+    "auth_type": "bearer",
+    "timeout_seconds": 30,
+    "date_field": "timestamp",
+    "value_field": "temperature_celsius",
+    "custom_headers": {},
+    "query_params": {}
+  },
+  "generated_code": "import asyncio\nimport httpx\nfrom datetime import datetime\n\nasync def fetch_data():\n    ...",
+  "created_at": "2026-03-03T10:30:00Z",
+  "updated_at": "2026-03-03T10:35:00Z",
+  "completed_at": null,
+  "status": "executing",
+  "error_message": null,
+  "execution_log": [
+    "Executed successfully at 2026-03-03T10:35:00Z",
+    "Sent 127 data points"
+  ],
+  "last_health_check": "2026-03-03T10:40:00Z",
+  "last_data_sent": "2026-03-03T10:39:45Z",
+  "data_points_count": 127,
+  "monitoring_details": {
+    "process_id": 12345,
+    "uptime_seconds": 600,
+    "memory_mb": 45.2
+  },
+  "phase": "continuous",
+  "high_water_mark": "2026-03-03T10:39:45Z",
+  "low_water_mark": "2026-02-01T00:00:00Z",
+  "execution_result": {
+    "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+    "success": true,
+    "message": "Wrapper executed successfully",
+    "data_points_sent": 127,
+    "execution_time": "2026-03-03T10:35:22Z"
+  }
+}
+```
+
+### Error Responses
+
+<ResponseField name="404 Not Found">
+  Wrapper not found:
+  - The wrapper_id does not exist
+  - The wrapper was deleted
+  
+  ```json
+  {
+    "detail": "Wrapper not found"
+  }
+  ```
+</ResponseField>
+
+### Use Cases
+
+- Monitor the current status of a wrapper
+- Check execution history and logs
+- Retrieve generated code for inspection
+- View monitoring metrics and health data
+- Access checkpoint information (high/low water marks) for resumable wrappers

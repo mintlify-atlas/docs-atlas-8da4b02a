@@ -1,0 +1,97 @@
+---
+title: Get File Information
+description: Retrieve information about an uploaded file
+---
+
+## GET /resources/wrappers/files/{file_id}
+
+Retrieve detailed information about a previously uploaded file, including its validation status, preview data, and metadata.
+
+### Authentication
+
+No authentication required.
+
+### Path Parameters
+
+<ParamField path="file_id" type="string" required>
+  The unique identifier of the uploaded file (returned from the upload endpoint).
+</ParamField>
+
+### Response
+
+<ResponseField name="file_id" type="string" required>
+  Unique identifier for the uploaded file.
+</ResponseField>
+
+<ResponseField name="filename" type="string" required>
+  Original filename as provided during upload.
+</ResponseField>
+
+<ResponseField name="file_size" type="integer" required>
+  File size in bytes.
+</ResponseField>
+
+<ResponseField name="preview_data" type="string">
+  Sample of the file content (first 5 rows) for preview purposes.
+</ResponseField>
+
+<ResponseField name="validation_status" type="string" required>
+  File validation status. Possible values:
+  - `valid` - File passed all validation checks
+  - `invalid` - File failed validation
+  - `pending` - Validation in progress
+</ResponseField>
+
+<ResponseField name="validation_errors" type="array">
+  List of validation error messages if the file is invalid. Only present when validation_status is `invalid`.
+  
+  <ResponseField name="item" type="string">
+    Error message describing the validation failure.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable message describing the result.
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET https://api.example.com/resources/wrappers/files/a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6
+```
+
+### Example Response
+
+#### Success
+
+```json
+{
+  "file_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+  "filename": "sales_data.csv",
+  "file_size": 245760,
+  "preview_data": "timestamp          value\n2024-01-01 00:00:00  100.5\n2024-01-01 01:00:00  102.3\n2024-01-01 02:00:00  98.7\n2024-01-01 03:00:00  105.2\n2024-01-01 04:00:00  99.8",
+  "validation_status": "valid",
+  "validation_errors": null,
+  "message": "File information retrieved successfully"
+}
+```
+
+### Error Responses
+
+#### 404 Not Found
+
+**File not found:**
+```json
+{
+  "detail": "File not found"
+}
+```
+
+#### 503 Service Unavailable
+
+**Database unavailable:**
+```json
+{
+  "detail": "Database unavailable"
+}
+```

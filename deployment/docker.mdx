@@ -1,0 +1,440 @@
+---
+title: Docker Deployment
+description: Deploy the Resource Service using Docker and Docker Compose
+---
+
+The Resource Service is designed to run in Docker containers with a MongoDB database and RabbitMQ message broker. This guide walks you through deploying the service using Docker Compose.
+
+## Prerequisites
+
+Before deploying, ensure you have the following installed:
+
+- Docker Engine 20.10 or higher
+- Docker Compose v2.0 or higher
+- At least 2GB of available RAM
+- Port 8080, 5672, and 15674 available
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Resource Service repository to your local machine:
+    
+    ```bash
+    git clone <repository-url>
+    cd resource-service
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the root directory with your configuration:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Edit the `.env` file and set the required variables, especially:
+    
+    ```bash
+    GEMINI_API_KEY=your_gemini_api_key_here
+    ORIGINS=http://localhost:3000,http://localhost:5173
+    ```
+    
+    <Note>
+      The `GEMINI_API_KEY` is required for wrapper generation functionality. Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey).
+    </Note>
+  </Step>
+
+  <Step title="Start the services">
+    Launch all services using Docker Compose:
+    
+    ```bash
+    docker compose up -d
+    ```
+    
+    This will start:
+    - Resource Service (FastAPI application)
+    - MongoDB database
+    - RabbitMQ message broker
+  </Step>
+
+  <Step title="Verify deployment">
+    Check that all services are running:
+    
+    ```bash
+    docker compose ps
+    ```
+    
+    You should see all services in a "healthy" state. Access the service at:
+    - API: http://localhost:8080
+    - RabbitMQ Management: http://localhost:15674 (user: guest, password: guest)
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+The service uses a multi-file Docker Compose setup for flexibility across environments.
+
+### Main Configuration (docker-compose.yml)
+
+The base configuration defines the core services:
+
+<CodeGroup>
+```yaml docker-compose.yml
+services:
+  resource-service:
+    build: .
+    container_name: resource-service
+    restart: always
+    environment:
+      - MONGO_URI=mongodb://resource-mongo:27017/resources
+      - ORIGINS=${ORIGINS:-localhost}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-1.5-flash}
+    depends_on:
+      - resource-mongo
+    volumes:
+      - resource_generated_wrappers:/app/generated_wrappers
+      - resource_wrapper_logs:/app/wrapper_logs
+      - resource_prompts:/app/prompts
+    networks:
+      - resource-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  resource-mongo:
+    image: mongo:latest
+    container_name: resource-mongo
+    environment:
+      - MONGO_INITDB_DATABASE=resources
+    volumes:
+      - resource_db:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 6s
+      timeout: 5s
+      retries: 5
+      start_period: 6s
+    networks:
+      - resource-network
+
+volumes:
+  resource_db:
+  resource_generated_wrappers:
+  resource_wrapper_logs:
+  resource_prompts:
+
+networks:
+  resource-network:
+    name: resource-network
+```
+</CodeGroup>
+
+### Override Configuration (docker-compose.override.yml)
+
+The override file adds development-specific features and RabbitMQ:
+
+<CodeGroup>
+```yaml docker-compose.override.yml
+services:
+  resource-service:
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    container_name: resource-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15674:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - resource-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 6s
+      timeout: 5s
+      retries: 5
+      start_period: 6s
+    restart: on-failure
+```
+</CodeGroup>
+
+<Note>
+  Docker Compose automatically merges `docker-compose.yml` and `docker-compose.override.yml`. The override file is typically used for local development settings.
+</Note>
+
+## Dockerfile
+
+The service uses a multi-stage build process optimized for Python applications:
+
+<CodeGroup>
+```dockerfile Dockerfile
+FROM python:3.13-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY ./app .
+EXPOSE 8080
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+```
+</CodeGroup>
+
+<Warning>
+  The `--reload` flag is enabled for development. For production deployments, remove this flag to improve performance and stability.
+</Warning>
+
+## Persistent Data Volumes
+
+The service uses Docker volumes to persist data across container restarts:
+
+| Volume Name | Purpose | Data Stored |
+|------------|---------|-------------|
+| `resource_db` | MongoDB data | All resource and wrapper metadata |
+| `resource_generated_wrappers` | Generated wrapper code | Python wrapper scripts |
+| `resource_wrapper_logs` | Wrapper execution logs | Logs from running wrappers |
+| `resource_prompts` | Wrapper generation prompts | Template prompts for AI generation |
+
+<Note>
+  These volumes are automatically created on first run and persist even when containers are removed. To completely reset the service, remove these volumes with `docker compose down -v`.
+</Note>
+
+## Health Checks
+
+All services include health checks to ensure proper startup ordering:
+
+### Resource Service Health Check
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  interval: 10s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+```
+
+The API must respond successfully to `GET /health` to be considered healthy.
+
+### MongoDB Health Check
+
+```yaml
+healthcheck:
+  test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+  interval: 6s
+  timeout: 5s
+  retries: 5
+  start_period: 6s
+```
+
+### RabbitMQ Health Check
+
+```yaml
+healthcheck:
+  test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+  interval: 6s
+  timeout: 5s
+  retries: 5
+  start_period: 6s
+```
+
+## Development Mode
+
+The service includes a development profile with hot-reloading:
+
+```yaml
+develop:
+  watch:
+    - action: sync
+      path: ./app
+      target: /app
+      ignore:
+        - __pycache__/
+    - action: rebuild
+      path: requirements.txt
+```
+
+<Steps>
+  <Step title="Enable development mode">
+    Start the service with file watching enabled:
+    
+    ```bash
+    docker compose watch
+    ```
+  </Step>
+
+  <Step title="Code changes sync automatically">
+    Changes to files in `./app` are automatically synced to the container without restart.
+  </Step>
+
+  <Step title="Dependency changes trigger rebuild">
+    Changes to `requirements.txt` trigger a full container rebuild.
+  </Step>
+</Steps>
+
+## Common Operations
+
+### View Logs
+
+<CodeGroup>
+```bash All Services
+docker compose logs -f
+```
+
+```bash Resource Service Only
+docker compose logs -f resource-service
+```
+
+```bash RabbitMQ Only
+docker compose logs -f rabbitmq
+```
+</CodeGroup>
+
+### Restart Services
+
+<CodeGroup>
+```bash All Services
+docker compose restart
+```
+
+```bash Resource Service Only
+docker compose restart resource-service
+```
+</CodeGroup>
+
+### Stop and Remove All Containers
+
+```bash
+docker compose down
+```
+
+<Warning>
+  This preserves volumes. To remove volumes as well, use `docker compose down -v`.
+</Warning>
+
+### Rebuild Images
+
+```bash
+docker compose build --no-cache
+```
+
+## Production Deployment
+
+For production deployments, create a `docker-compose.prod.yml` file:
+
+<CodeGroup>
+```yaml docker-compose.prod.yml
+services:
+  resource-service:
+    restart: unless-stopped
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+    environment:
+      - WRAPPER_GENERATION_DEBUG_MODE=false
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  resource-mongo:
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rabbitmq:
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+</CodeGroup>
+
+Deploy with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+<Note>
+  Production deployments use multiple Uvicorn workers for better performance and disable debug mode.
+</Note>
+
+## Networking
+
+All services communicate on a dedicated network:
+
+```yaml
+networks:
+  resource-network:
+    name: resource-network
+```
+
+Service-to-service communication uses container names:
+- MongoDB: `resource-mongo:27017`
+- RabbitMQ: `rabbitmq:5672`
+- Resource Service: `resource-service:8080`
+
+## Troubleshooting
+
+### Service Won't Start
+
+Check service logs:
+```bash
+docker compose logs resource-service
+```
+
+Common issues:
+- Missing `GEMINI_API_KEY` environment variable
+- Port 8080 already in use
+- MongoDB connection failed
+
+### MongoDB Connection Issues
+
+Verify MongoDB is healthy:
+```bash
+docker compose ps resource-mongo
+```
+
+Test MongoDB connectivity:
+```bash
+docker compose exec resource-mongo mongosh --eval "db.adminCommand('ping')"
+```
+
+### RabbitMQ Connection Issues
+
+Check RabbitMQ management interface at http://localhost:15674
+
+Verify RabbitMQ is healthy:
+```bash
+docker compose ps rabbitmq
+```
+
+### Reset Everything
+
+To completely reset the service:
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+```
+
+<Warning>
+  This will delete all data, including resources, wrappers, and logs.
+</Warning>

@@ -1,0 +1,796 @@
+---
+title: Installation
+description: Complete setup guide for Resource Service development and production environments
+---
+
+## Prerequisites
+
+Before installing Resource Service, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="Docker" icon="docker">
+    Docker Engine 20.10+ or Docker Desktop
+    
+    [Install Docker](https://docs.docker.com/get-docker/)
+  </Card>
+  <Card title="Docker Compose" icon="layer-group">
+    Docker Compose V2 (included with Docker Desktop)
+    
+    [Install Compose](https://docs.docker.com/compose/install/)
+  </Card>
+  <Card title="Google Gemini API Key" icon="key">
+    Required for AI-powered wrapper generation
+    
+    [Get API Key](https://aistudio.google.com/app/apikey)
+  </Card>
+  <Card title="Git" icon="git-alt">
+    For cloning the repository
+    
+    [Install Git](https://git-scm.com/downloads)
+  </Card>
+</CardGroup>
+
+<Note>
+  **System Requirements**
+  - CPU: 2+ cores recommended
+  - RAM: 4GB minimum, 8GB recommended
+  - Disk: 2GB free space for Docker images and volumes
+  - OS: Linux, macOS, or Windows with WSL2
+</Note>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="Docker Compose (Recommended)">
+    The easiest way to get started. Perfect for development and testing.
+
+    ### Step 1: Clone Repository
+
+    ```bash
+    git clone <repository-url>
+    cd resource-service
+    ```
+
+    ### Step 2: Environment Configuration
+
+    Create your environment file:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Edit `.env` with your configuration:
+
+    ```bash .env
+    # CORS Origins (comma-separated)
+    ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
+
+    # Google Gemini AI Configuration
+    GEMINI_API_KEY=your_actual_gemini_api_key_here
+    GEMINI_MODEL_NAME=gemini-1.5-flash
+    ```
+
+    <Warning>
+      **Never commit your `.env` file to version control!** The `.gitignore` file excludes it by default, but always verify before committing.
+    </Warning>
+
+    ### Step 3: Launch Services
+
+    Start all services in detached mode:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Watch the startup logs:
+
+    ```bash
+    docker compose logs -f
+    ```
+
+    ### Step 4: Verify Installation
+
+    Check service health:
+
+    ```bash
+    # Check running containers
+    docker compose ps
+
+    # Test the API
+    curl http://localhost:8080/health
+
+    # View API documentation
+    open http://localhost:8080/docs
+    ```
+
+    Expected output:
+    ```json
+    {"message": "Hello from resource service!"}
+    ```
+
+    <Tip>
+      Access the interactive API documentation at [http://localhost:8080/docs](http://localhost:8080/docs) to explore all endpoints.
+    </Tip>
+  </Tab>
+
+  <Tab title="Development Setup">
+    For active development with hot reloading and debugging.
+
+    ### Step 1: Clone and Setup Python Environment
+
+    ```bash
+    git clone <repository-url>
+    cd resource-service
+
+    # Create virtual environment
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+    # Install dependencies
+    pip install -r requirements.txt
+    ```
+
+    ### Step 2: Start MongoDB Separately
+
+    ```bash
+    docker compose up -d resource-mongo
+    ```
+
+    ### Step 3: Configure Environment
+
+    Create `.env` for local development:
+
+    ```bash .env
+    ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
+    MONGO_URI=mongodb://localhost:27017/resources
+    RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+    GEMINI_API_KEY=your_gemini_api_key_here
+    GEMINI_MODEL_NAME=gemini-1.5-flash
+    RESOURCE_DATA_QUEUE=resource_data
+    RESOURCE_DELETED_QUEUE=resource_deleted
+    COLLECTED_DATA_QUEUE=collected_data
+    DATA_RABBITMQ_URL=amqp://user:password@localhost:5672/
+    DATA_QUEUE_NAME=data_queue
+    WRAPPER_CREATION_QUEUE_NAME=wrapper_creation_queue
+    WRAPPER_GENERATION_DEBUG_MODE=true
+    ```
+
+    ### Step 4: Run Development Server
+
+    ```bash
+    cd app
+    uvicorn main:app --reload --host 0.0.0.0 --port 8080
+    ```
+
+    The `--reload` flag enables hot reloading when code changes.
+
+    <Info>
+      Development mode includes:
+      - Automatic code reloading
+      - Detailed error tracebacks
+      - Debug logging
+      - Source map support
+    </Info>
+
+    ### Step 5: Enable Docker Compose Watch (Optional)
+
+    For containerized development with automatic sync:
+
+    ```bash
+    docker compose watch
+    ```
+
+    This watches for changes and syncs them to the container without rebuilding.
+  </Tab>
+
+  <Tab title="Production Deployment">
+    Production-ready deployment with optimizations and security.
+
+    ### Step 1: Clone Repository
+
+    ```bash
+    git clone <repository-url>
+    cd resource-service
+    ```
+
+    ### Step 2: Production Environment Configuration
+
+    Create production `.env`:
+
+    ```bash .env
+    # Production CORS origins
+    ORIGINS=https://your-domain.com,https://app.your-domain.com
+
+    # MongoDB (use managed service or secure deployment)
+    MONGO_URI=mongodb://username:password@mongo-host:27017/resources?authSource=admin
+
+    # RabbitMQ (use managed service or secure deployment)
+    RABBITMQ_URL=amqps://username:password@rabbitmq-host:5671/
+    DATA_RABBITMQ_URL=amqps://username:password@data-rabbitmq-host:5671/
+
+    # Google Gemini AI
+    GEMINI_API_KEY=production_gemini_api_key
+    GEMINI_MODEL_NAME=gemini-1.5-flash
+
+    # Queue Names
+    RESOURCE_DATA_QUEUE=resource_data
+    RESOURCE_DELETED_QUEUE=resource_deleted
+    COLLECTED_DATA_QUEUE=collected_data
+    DATA_QUEUE_NAME=data_queue
+    WRAPPER_CREATION_QUEUE_NAME=wrapper_creation_queue
+
+    # Performance
+    CHUNK_SIZE_THRESHOLD=1000
+
+    # Disable debug mode
+    WRAPPER_GENERATION_DEBUG_MODE=false
+    ```
+
+    <Warning>
+      **Production Security Checklist:**
+      - Use strong MongoDB credentials
+      - Enable MongoDB authentication
+      - Use TLS/SSL for RabbitMQ connections
+      - Restrict CORS origins to your domains
+      - Store secrets in a secure vault (AWS Secrets Manager, HashiCorp Vault, etc.)
+      - Use managed database services when possible
+      - Enable firewall rules
+      - Regular security updates
+    </Warning>
+
+    ### Step 3: Production Docker Compose
+
+    Create `docker-compose.prod.yml`:
+
+    ```yaml docker-compose.prod.yml
+    services:
+      resource-service:
+        build: .
+        container_name: resource-service
+        restart: always
+        env_file: .env
+        ports:
+          - "8080:8080"
+        volumes:
+          - resource_generated_wrappers:/app/generated_wrappers
+          - resource_wrapper_logs:/app/wrapper_logs
+          - resource_prompts:/app/prompts
+        networks:
+          - resource-network
+        healthcheck:
+          test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+          start_period: 40s
+        deploy:
+          resources:
+            limits:
+              cpus: '2'
+              memory: 2G
+            reservations:
+              cpus: '1'
+              memory: 1G
+
+    volumes:
+      resource_generated_wrappers:
+      resource_wrapper_logs:
+      resource_prompts:
+
+    networks:
+      resource-network:
+        name: resource-network
+    ```
+
+    ### Step 4: Deploy
+
+    ```bash
+    # Build and start services
+    docker compose -f docker-compose.prod.yml up -d --build
+
+    # Verify deployment
+    docker compose -f docker-compose.prod.yml ps
+    docker compose -f docker-compose.prod.yml logs -f
+    ```
+
+    ### Step 5: Setup Reverse Proxy (Recommended)
+
+    Use nginx or Traefik for HTTPS and load balancing:
+
+    ```nginx nginx.conf
+    server {
+        listen 80;
+        server_name api.your-domain.com;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name api.your-domain.com;
+
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+        location / {
+            proxy_pass http://localhost:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+
+    <Tip>
+      Consider using a container orchestration platform like Kubernetes, Docker Swarm, or AWS ECS for production deployments at scale.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Environment Variables Reference
+
+Complete reference of all configuration options:
+
+<ParamField path="ORIGINS" type="string" required>
+  Comma-separated list of allowed CORS origins
+  
+  **Example:** `http://localhost:3000,https://app.example.com`
+  
+  **Default:** `localhost`
+</ParamField>
+
+<ParamField path="MONGO_URI" type="string" required>
+  MongoDB connection string
+  
+  **Example:** `mongodb://username:password@host:27017/database`
+  
+  **Default:** `mongodb://localhost:27017`
+  
+  **Docker:** `mongodb://resource-mongo:27017/resources`
+</ParamField>
+
+<ParamField path="RABBITMQ_URL" type="string" required>
+  RabbitMQ connection URL for service communication
+  
+  **Example:** `amqp://user:pass@host:5672/`
+  
+  **Default:** `amqp://guest:guest@rabbitmq/`
+</ParamField>
+
+<ParamField path="DATA_RABBITMQ_URL" type="string" required>
+  RabbitMQ URL for data streaming (used by wrappers)
+  
+  **Example:** `amqp://user:pass@data-mq:5672/`
+  
+  **Default:** `amqp://user:password@data-mq:5672/`
+</ParamField>
+
+<ParamField path="GEMINI_API_KEY" type="string" required>
+  Google Gemini API key for AI wrapper generation
+  
+  Get your key at [Google AI Studio](https://aistudio.google.com/app/apikey)
+</ParamField>
+
+<ParamField path="GEMINI_MODEL_NAME" type="string">
+  Gemini model to use for code generation
+  
+  **Options:** `gemini-1.5-flash`, `gemini-1.5-pro`
+  
+  **Default:** `gemini-1.5-flash`
+  
+  **Tip:** Use `flash` for faster generation, `pro` for complex sources
+</ParamField>
+
+<ParamField path="RESOURCE_DATA_QUEUE" type="string">
+  Queue name for resource data messages
+  
+  **Default:** `resource_data`
+</ParamField>
+
+<ParamField path="RESOURCE_DELETED_QUEUE" type="string">
+  Queue name for resource deletion events
+  
+  **Default:** `resource_deleted`
+</ParamField>
+
+<ParamField path="COLLECTED_DATA_QUEUE" type="string">
+  Queue name for collected data points
+  
+  **Default:** `collected_data`
+</ParamField>
+
+<ParamField path="DATA_QUEUE_NAME" type="string">
+  Queue name for wrapper data streaming
+  
+  **Default:** `data_queue`
+</ParamField>
+
+<ParamField path="WRAPPER_CREATION_QUEUE_NAME" type="string">
+  Queue name for async wrapper creation requests
+  
+  **Default:** `wrapper_creation_queue`
+</ParamField>
+
+<ParamField path="CHUNK_SIZE_THRESHOLD" type="integer">
+  Number of data points per chunk when sending to queue
+  
+  **Default:** `1000`
+</ParamField>
+
+<ParamField path="WRAPPER_GENERATION_DEBUG_MODE" type="boolean">
+  Enable verbose logging for wrapper generation
+  
+  **Default:** `false`
+  
+  Set to `true` for development debugging
+</ParamField>
+
+## Docker Compose Services
+
+Understanding the service architecture:
+
+### Resource Service
+
+The main FastAPI application:
+
+```yaml
+services:
+  resource-service:
+    build: .                    # Builds from Dockerfile
+    container_name: resource-service
+    restart: always             # Auto-restart on failure
+    ports:
+      - "8080:8080"             # API endpoint
+    environment:                # Configuration from .env
+      - MONGO_URI=mongodb://resource-mongo:27017/resources
+      - ORIGINS=${ORIGINS:-localhost}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-1.5-flash}
+    depends_on:
+      - resource-mongo          # Wait for MongoDB
+    volumes:
+      - resource_generated_wrappers:/app/generated_wrappers
+      - resource_wrapper_logs:/app/wrapper_logs
+      - resource_prompts:/app/prompts
+    healthcheck:                # Health monitoring
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+### MongoDB Service
+
+Document database for resources and metadata:
+
+```yaml
+  resource-mongo:
+    image: mongo:latest
+    container_name: resource-mongo
+    environment:
+      - MONGO_INITDB_DATABASE=resources
+    volumes:
+      - resource_db:/data/db    # Persistent storage
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 6s
+      timeout: 5s
+      retries: 5
+```
+
+### Volumes
+
+Persistent storage for data and logs:
+
+- `resource_db`: MongoDB data
+- `resource_generated_wrappers`: AI-generated wrapper code
+- `resource_wrapper_logs`: Execution logs from wrappers
+- `resource_prompts`: AI prompts and templates
+
+## Managing Services
+
+<AccordionGroup>
+  <Accordion title="Start Services" icon="play">
+    ```bash
+    # Start all services
+    docker compose up -d
+
+    # Start specific service
+    docker compose up -d resource-service
+
+    # Start with logs in foreground
+    docker compose up
+    ```
+  </Accordion>
+
+  <Accordion title="Stop Services" icon="stop">
+    ```bash
+    # Stop all services
+    docker compose down
+
+    # Stop and remove volumes (deletes data!)
+    docker compose down -v
+
+    # Stop specific service
+    docker compose stop resource-service
+    ```
+  </Accordion>
+
+  <Accordion title="View Logs" icon="file-lines">
+    ```bash
+    # All services
+    docker compose logs -f
+
+    # Specific service
+    docker compose logs -f resource-service
+
+    # Last 100 lines
+    docker compose logs --tail=100 resource-service
+    ```
+  </Accordion>
+
+  <Accordion title="Restart Services" icon="rotate">
+    ```bash
+    # Restart all
+    docker compose restart
+
+    # Restart specific service
+    docker compose restart resource-service
+
+    # Rebuild and restart
+    docker compose up -d --build
+    ```
+  </Accordion>
+
+  <Accordion title="Update Services" icon="arrow-up">
+    ```bash
+    # Pull latest changes
+    git pull
+
+    # Rebuild images
+    docker compose build
+
+    # Restart with new images
+    docker compose up -d
+    ```
+  </Accordion>
+
+  <Accordion title="Check Status" icon="heart-pulse">
+    ```bash
+    # Service status
+    docker compose ps
+
+    # Resource usage
+    docker stats resource-service
+
+    # Health checks
+    docker inspect resource-service | grep -A 10 Health
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Database Management
+
+### Access MongoDB Shell
+
+```bash
+# Connect to MongoDB container
+docker compose exec resource-mongo mongosh resources
+```
+
+### Common Database Operations
+
+<CodeGroup>
+
+```javascript List Collections
+show collections
+```
+
+```javascript Query Resources
+db.resources.find().pretty()
+db.resources.countDocuments()
+```
+
+```javascript Query Wrappers
+db.generated_wrappers.find().pretty()
+db.generated_wrappers.find({status: "executing"})
+```
+
+```javascript Clear Collections (Careful!)
+db.resources.deleteMany({})
+db.generated_wrappers.deleteMany({})
+```
+
+</CodeGroup>
+
+### Backup and Restore
+
+<CodeGroup>
+
+```bash Backup Database
+docker compose exec resource-mongo mongodump --db=resources --out=/data/backup
+docker cp resource-mongo:/data/backup ./backup
+```
+
+```bash Restore Database
+docker cp ./backup resource-mongo:/data/backup
+docker compose exec resource-mongo mongorestore --db=resources /data/backup/resources
+```
+
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Port Already in Use" icon="plug">
+    If port 8080 is already in use:
+
+    ```bash
+    # Find process using port 8080
+    lsof -i :8080  # macOS/Linux
+    netstat -ano | findstr :8080  # Windows
+
+    # Change port in docker-compose.yml
+    ports:
+      - "8081:8080"  # Use port 8081 instead
+    ```
+  </Accordion>
+
+  <Accordion title="MongoDB Connection Errors" icon="database">
+    ```bash
+    # Check MongoDB status
+    docker compose ps resource-mongo
+
+    # View MongoDB logs
+    docker compose logs resource-mongo
+
+    # Restart MongoDB
+    docker compose restart resource-mongo
+
+    # Verify connection from service
+    docker compose exec resource-service curl resource-mongo:27017
+    ```
+  </Accordion>
+
+  <Accordion title="Out of Memory" icon="memory">
+    Increase Docker memory limits:
+
+    **Docker Desktop:** Settings → Resources → Memory → 4GB+
+
+    **docker-compose.yml:**
+    ```yaml
+    services:
+      resource-service:
+        deploy:
+          resources:
+            limits:
+              memory: 2G
+    ```
+  </Accordion>
+
+  <Accordion title="Gemini API Errors" icon="robot">
+    ```bash
+    # Check API key is set
+    docker compose exec resource-service env | grep GEMINI
+
+    # View error logs
+    docker compose logs resource-service | grep -i gemini
+
+    # Test API key manually
+    curl -H "x-goog-api-key: YOUR_KEY" \
+      https://generativelanguage.googleapis.com/v1beta/models
+    ```
+
+    Verify your API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+  </Accordion>
+
+  <Accordion title="Wrapper Execution Failures" icon="gear">
+    ```bash
+    # Check wrapper logs
+    ls -l wrapper_logs/
+    cat wrapper_logs/wrapper_<wrapper_id>.log
+
+    # View process status
+    docker compose exec resource-service ps aux | grep wrapper
+
+    # Check generated code
+    ls -l generated_wrappers/
+    cat generated_wrappers/wrapper_<wrapper_id>.py
+    ```
+
+    Enable debug mode:
+    ```bash .env
+    WRAPPER_GENERATION_DEBUG_MODE=true
+    ```
+  </Accordion>
+
+  <Accordion title="File Upload Issues" icon="upload">
+    ```bash
+    # Check upload directory permissions
+    docker compose exec resource-service ls -la /app/uploaded_files/
+
+    # View file service logs
+    docker compose logs resource-service | grep -i "file"
+
+    # Check available disk space
+    docker compose exec resource-service df -h
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Verify Installation
+
+Run these checks to ensure everything is working:
+
+<Steps>
+  <Step title="Check Service Health">
+    ```bash
+    curl http://localhost:8080/health
+    ```
+    Expected: `{"message": "Hello from resource service!"}`
+  </Step>
+
+  <Step title="Check Service Version">
+    ```bash
+    curl http://localhost:8080/resources/version
+    ```
+    Expected: `{"service": "resource-service", "version": "1.0.0"}`
+  </Step>
+
+  <Step title="List Resources">
+    ```bash
+    curl http://localhost:8080/resources/
+    ```
+    Expected: `[]` (empty array on first install)
+  </Step>
+
+  <Step title="Access API Docs">
+    Open [http://localhost:8080/docs](http://localhost:8080/docs)
+    
+    You should see the Swagger UI with all available endpoints.
+  </Step>
+
+  <Step title="Check Database Connection">
+    ```bash
+    docker compose exec resource-mongo mongosh --eval "db.adminCommand('ping')"
+    ```
+    Expected: `{ ok: 1 }`
+  </Step>
+</Steps>
+
+<Check>
+  **Installation Complete!** Your Resource Service is ready to use. Head to the [Quick Start Guide](/quickstart) to create your first wrapper.
+</Check>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Create your first resource and wrapper in 5 minutes
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/resources/list"
+  >
+    Explore all available endpoints and schemas
+  </Card>
+  <Card
+    title="Configuration Guide"
+    icon="gear"
+    href="/deployment/configuration"
+  >
+    Advanced configuration and optimization
+  </Card>
+  <Card
+    title="Architecture"
+    icon="sitemap"
+    href="/concepts/architecture"
+  >
+    Understand the system design and components
+  </Card>
+</CardGroup>

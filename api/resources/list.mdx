@@ -1,0 +1,108 @@
+---
+title: "List Resources"
+description: "Retrieve a paginated list of all resources"
+---
+
+## GET /resources
+
+Returns a list of all resources with pagination support. Only returns resources that have not been soft-deleted.
+
+### Authentication
+
+This endpoint requires authentication.
+
+### Query Parameters
+
+<ParamField query="skip" type="integer" default="0">
+  Number of resources to skip for pagination. Must be >= 0.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="10">
+  Maximum number of resources to return. Must be between 1 and 50.
+</ParamField>
+
+### Response
+
+Returns an array of resource objects.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the resource (MongoDB ObjectId)
+</ResponseField>
+
+<ResponseField name="wrapper_id" type="string" required>
+  ID of the wrapper associated with this resource
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the resource
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Type of the resource
+</ResponseField>
+
+<ResponseField name="startPeriod" type="datetime" optional>
+  Start period timestamp for the resource
+</ResponseField>
+
+<ResponseField name="endPeriod" type="datetime" optional>
+  End period timestamp for the resource
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/resources?skip=0&limit=10" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response
+
+```json
+[
+  {
+    "id": "507f1f77bcf86cd799439011",
+    "wrapper_id": "wrapper_123",
+    "name": "Production Database",
+    "type": "database",
+    "startPeriod": "2024-01-15T10:30:00Z",
+    "endPeriod": null
+  },
+  {
+    "id": "507f1f77bcf86cd799439012",
+    "wrapper_id": "wrapper_456",
+    "name": "API Gateway",
+    "type": "gateway",
+    "startPeriod": "2024-02-20T14:45:00Z",
+    "endPeriod": null
+  }
+]
+```
+
+### Error Responses
+
+<ResponseField name="422" type="Validation Error">
+  Invalid query parameters (e.g., limit > 50 or skip < 0)
+</ResponseField>
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["query", "limit"],
+      "msg": "ensure this value is less than or equal to 50",
+      "type": "value_error.number.not_le"
+    }
+  ]
+}
+```
+
+<ResponseField name="500" type="Internal Server Error">
+  Database operation failed
+</ResponseField>
+
+```json
+{
+  "detail": "Internal server error"
+}
+```

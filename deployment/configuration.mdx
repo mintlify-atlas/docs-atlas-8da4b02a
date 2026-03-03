@@ -1,0 +1,412 @@
+---
+title: Configuration
+description: Configure the Resource Service with settings and options
+---
+
+The Resource Service uses a hierarchical configuration system built on Pydantic Settings, supporting environment variables, `.env` files, and sensible defaults.
+
+## Configuration System
+
+The service loads configuration from multiple sources in order of precedence:
+
+1. Environment variables (highest priority)
+2. `.env` file in the project root
+3. Default values defined in `app/config.py` (lowest priority)
+
+<Note>
+  Environment variables always override `.env` file values, which in turn override defaults.
+</Note>
+
+## Configuration File
+
+All configuration is managed through the `Settings` class in `app/config.py`:
+
+<CodeGroup>
+```python app/config.py
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    ORIGINS: str = Field(default="localhost", env="ORIGINS")
+    MONGO_URI: str = Field(default="mongodb://localhost:27017", env="MONGO_URI")
+    RABBITMQ_URL: str = Field(
+        default="amqp://guest:guest@rabbitmq/", env="RABBITMQ_URL"
+    )
+    RESOURCE_DATA_QUEUE: str = Field(default="resource_data", env="RESOURCE_DATA_QUEUE")
+    RESOURCE_DELETED_QUEUE: str = Field(
+        default="resource_deleted", env="RESOURCE_DELETED_QUEUE"
+    )
+    COLLECTED_DATA_QUEUE: str = Field(
+        default="collected_data", env="COLLECTED_DATA_QUEUE"
+    )
+    CHUNK_SIZE_THRESHOLD: int = Field(default=1000, env="CHUNK_SIZE_THRESHOLD")
+
+    # Wrapper Generation
+    GEMINI_API_KEY: str = Field(..., env="GEMINI_API_KEY")
+    GEMINI_MODEL_NAME: str = Field(default="gemini-1.5-flash", env="GEMINI_MODEL_NAME")
+    DATA_RABBITMQ_URL: str = Field(
+        default="amqp://user:password@data-mq:5672/", env="DATA_RABBITMQ_URL"
+    )
+    DATA_QUEUE_NAME: str = Field(default="data_queue", env="DATA_QUEUE_NAME")
+
+    WRAPPER_CREATION_QUEUE_NAME: str = Field(
+        default="wrapper_creation_queue", env="WRAPPER_CREATION_QUEUE_NAME"
+    )
+
+    WRAPPER_GENERATION_DEBUG_MODE: bool = Field(
+        default=False, env="WRAPPER_GENERATION_DEBUG_MODE"
+    )
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+settings = Settings()
+```
+</CodeGroup>
+
+## Core Settings
+
+### CORS Configuration
+
+<ParamField path="ORIGINS" type="string" default="localhost">
+  Comma-separated list of allowed CORS origins for API requests.
+  
+  ```bash
+  ORIGINS=http://localhost:3000,http://localhost:5173,https://app.example.com
+  ```
+  
+  The service automatically splits this value and configures the FastAPI CORS middleware:
+  
+  ```python
+  origins = settings.ORIGINS.split(",")
+  app.add_middleware(
+      CORSMiddleware,
+      allow_origins=origins,
+      allow_credentials=True,
+      allow_methods=["*"],
+      allow_headers=["*"],
+  )
+  ```
+</ParamField>
+
+<Warning>
+  In production, specify exact origins instead of using wildcards. Never use `*` for `allow_origins` in production.
+</Warning>
+
+### Database Configuration
+
+<ParamField path="MONGO_URI" type="string" default="mongodb://localhost:27017">
+  MongoDB connection URI including host, port, and database name.
+  
+  ```bash
+  # Local development
+  MONGO_URI=mongodb://localhost:27017/resources
+  
+  # Docker Compose
+  MONGO_URI=mongodb://resource-mongo:27017/resources
+  
+  # MongoDB Atlas
+  MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/resources?retryWrites=true&w=majority
+  ```
+</ParamField>
+
+<Note>
+  The database name should be included in the connection URI. The service uses the `resources` database by default.
+</Note>
+
+## Message Queue Configuration
+
+### RabbitMQ Connection
+
+<ParamField path="RABBITMQ_URL" type="string" default="amqp://guest:guest@rabbitmq/">
+  RabbitMQ connection URL in AMQP format.
+  
+  ```bash
+  # Local development
+  RABBITMQ_URL=amqp://guest:guest@localhost/
+  
+  # Docker Compose
+  RABBITMQ_URL=amqp://guest:guest@rabbitmq/
+  
+  # Production with authentication
+  RABBITMQ_URL=amqp://username:password@rabbitmq.example.com:5672/vhost
+  ```
+</ParamField>
+
+### Queue Names
+
+<ParamField path="RESOURCE_DATA_QUEUE" type="string" default="resource_data">
+  Queue name for publishing resource creation and update events.
+  
+  ```bash
+  RESOURCE_DATA_QUEUE=resource_data
+  ```
+</ParamField>
+
+<ParamField path="RESOURCE_DELETED_QUEUE" type="string" default="resource_deleted">
+  Queue name for publishing resource deletion events.
+  
+  ```bash
+  RESOURCE_DELETED_QUEUE=resource_deleted
+  ```
+</ParamField>
+
+<ParamField path="COLLECTED_DATA_QUEUE" type="string" default="collected_data">
+  Queue name for consuming collected data from wrappers.
+  
+  ```bash
+  COLLECTED_DATA_QUEUE=collected_data
+  ```
+</ParamField>
+
+## Data Collection Settings
+
+<ParamField path="CHUNK_SIZE_THRESHOLD" type="integer" default="1000">
+  Maximum number of records to include in a single message chunk. Data exceeding this threshold is split into multiple chunks.
+  
+  ```bash
+  CHUNK_SIZE_THRESHOLD=1000
+  ```
+  
+  Adjust based on:
+  - RabbitMQ message size limits
+  - Network bandwidth
+  - Consumer processing capacity
+</ParamField>
+
+<Note>
+  Larger chunk sizes reduce message overhead but increase memory usage and processing time per message.
+</Note>
+
+## Wrapper Generation Settings
+
+### Gemini AI Configuration
+
+<ParamField path="GEMINI_API_KEY" type="string" required>
+  Google Gemini API key for wrapper code generation. This is the only required configuration parameter.
+  
+  ```bash
+  GEMINI_API_KEY=AIzaSyD...
+  ```
+  
+  Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey).
+</ParamField>
+
+<Warning>
+  The service will fail to start if `GEMINI_API_KEY` is not provided. Keep this key secure and never commit it to version control.
+</Warning>
+
+<ParamField path="GEMINI_MODEL_NAME" type="string" default="gemini-1.5-flash">
+  Gemini model to use for wrapper generation.
+  
+  ```bash
+  GEMINI_MODEL_NAME=gemini-1.5-flash
+  ```
+  
+  Available models:
+  - `gemini-1.5-flash` - Fast, cost-effective (recommended)
+  - `gemini-1.5-pro` - More capable, higher quality
+  - `gemini-1.0-pro` - Legacy model
+</ParamField>
+
+### Data Service Integration
+
+<ParamField path="DATA_RABBITMQ_URL" type="string" default="amqp://user:password@data-mq:5672/">
+  RabbitMQ connection URL for the data service (where collected data is published).
+  
+  ```bash
+  DATA_RABBITMQ_URL=amqp://user:password@data-mq:5672/
+  ```
+  
+  This is separate from the main `RABBITMQ_URL` to support distributed deployments where the data service has its own message broker.
+</ParamField>
+
+<ParamField path="DATA_QUEUE_NAME" type="string" default="data_queue">
+  Queue name on the data service broker where collected data is published.
+  
+  ```bash
+  DATA_QUEUE_NAME=data_queue
+  ```
+</ParamField>
+
+<ParamField path="WRAPPER_CREATION_QUEUE_NAME" type="string" default="wrapper_creation_queue">
+  Queue name for wrapper creation requests.
+  
+  ```bash
+  WRAPPER_CREATION_QUEUE_NAME=wrapper_creation_queue
+  ```
+</ParamField>
+
+### Debug Mode
+
+<ParamField path="WRAPPER_GENERATION_DEBUG_MODE" type="boolean" default="false">
+  Enable verbose logging for wrapper generation process.
+  
+  ```bash
+  # Enable debug mode
+  WRAPPER_GENERATION_DEBUG_MODE=true
+  
+  # Disable debug mode (production)
+  WRAPPER_GENERATION_DEBUG_MODE=false
+  ```
+  
+  When enabled, logs include:
+  - Generated wrapper code
+  - AI model prompts and responses
+  - Detailed execution traces
+</ParamField>
+
+<Warning>
+  Debug mode generates significant log volume and may expose sensitive data. Only enable in development environments.
+</Warning>
+
+## Configuration Examples
+
+### Development Environment
+
+<CodeGroup>
+```bash .env (Development)
+ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
+MONGO_URI=mongodb://resource-mongo:27017/resources
+RABBITMQ_URL=amqp://guest:guest@rabbitmq/
+GEMINI_API_KEY=AIzaSyD...
+GEMINI_MODEL_NAME=gemini-1.5-flash
+WRAPPER_GENERATION_DEBUG_MODE=true
+CHUNK_SIZE_THRESHOLD=1000
+```
+</CodeGroup>
+
+### Production Environment
+
+<CodeGroup>
+```bash .env (Production)
+ORIGINS=https://app.example.com,https://dashboard.example.com
+MONGO_URI=mongodb+srv://prod-user:secure-password@cluster.mongodb.net/resources?retryWrites=true&w=majority
+RABBITMQ_URL=amqp://prod-user:secure-password@mq.example.com:5672/prod
+DATA_RABBITMQ_URL=amqp://data-user:secure-password@data-mq.example.com:5672/data
+GEMINI_API_KEY=AIzaSyD...
+GEMINI_MODEL_NAME=gemini-1.5-pro
+WRAPPER_GENERATION_DEBUG_MODE=false
+CHUNK_SIZE_THRESHOLD=500
+```
+</CodeGroup>
+
+### Minimal Configuration
+
+The only required variable is `GEMINI_API_KEY`. All other settings have defaults:
+
+<CodeGroup>
+```bash .env (Minimal)
+GEMINI_API_KEY=AIzaSyD...
+```
+</CodeGroup>
+
+## Configuration Validation
+
+The service validates configuration on startup using Pydantic. Invalid configuration triggers immediate failure with descriptive error messages:
+
+```bash
+# Missing required field
+ValidationError: 1 validation error for Settings
+GEMINI_API_KEY
+  field required (type=value_error.missing)
+
+# Invalid type
+ValidationError: 1 validation error for Settings
+CHUNK_SIZE_THRESHOLD
+  value is not a valid integer (type=type_error.integer)
+```
+
+## Accessing Configuration
+
+Configuration is accessed through the global `settings` object:
+
+```python
+from config import settings
+
+# Access configuration values
+mongo_uri = settings.MONGO_URI
+api_key = settings.GEMINI_API_KEY
+origins = settings.ORIGINS.split(",")
+```
+
+## Runtime Configuration Changes
+
+<Warning>
+  Configuration is loaded once at application startup. Changes to environment variables or `.env` files require a service restart to take effect.
+</Warning>
+
+To apply configuration changes:
+
+```bash
+# Docker Compose
+docker compose restart resource-service
+
+# Kubernetes
+kubectl rollout restart deployment/resource-service
+```
+
+## Security Best Practices
+
+<Steps>
+  <Step title="Never commit secrets">
+    Add `.env` to `.gitignore` and use `.env.example` as a template:
+    
+    ```bash
+    # .env.example
+    GEMINI_API_KEY=your_api_key_here
+    MONGO_URI=mongodb://localhost:27017/resources
+    ```
+  </Step>
+
+  <Step title="Use strong credentials">
+    Generate secure passwords for production databases and message brokers:
+    
+    ```bash
+    openssl rand -base64 32
+    ```
+  </Step>
+
+  <Step title="Restrict CORS origins">
+    Only allow specific origins in production:
+    
+    ```bash
+    # Good
+    ORIGINS=https://app.example.com
+    
+    # Bad
+    ORIGINS=*
+    ```
+  </Step>
+
+  <Step title="Use environment-specific configuration">
+    Maintain separate configuration for each environment:
+    
+    - `.env.development`
+    - `.env.staging`
+    - `.env.production`
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Configuration Not Loading
+
+1. Verify `.env` file location (must be in project root)
+2. Check file permissions (must be readable)
+3. Ensure no syntax errors in `.env` file
+4. Verify environment variable names match exactly (case-sensitive)
+
+### Values Not Updating
+
+1. Restart the service after configuration changes
+2. Check that environment variables override `.env` file
+3. Verify Docker Compose environment variables are passed correctly
+
+### Validation Errors
+
+1. Check data types (strings, integers, booleans)
+2. Ensure required fields are provided
+3. Verify URL formats are correct
+4. Check for typos in variable names

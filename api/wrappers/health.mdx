@@ -1,0 +1,123 @@
+---
+title: Get Wrapper Health
+description: Get the current health status of a wrapper
+---
+
+## GET /resources/wrappers/{wrapper_id}/health
+
+Get the current health status of a wrapper. This is a universal endpoint that works for all wrapper types (API, CSV, XLSX) and provides consistent health status information.
+
+### Authentication
+
+This endpoint requires authentication. Include your API key in the request headers.
+
+### Path Parameters
+
+<ParamField path="wrapper_id" type="string" required>
+  The unique identifier of the wrapper to check
+</ParamField>
+
+### Response
+
+<ResponseField name="wrapper_id" type="string">
+  The wrapper ID that was checked
+</ResponseField>
+
+<ResponseField name="health_status" type="string">
+  Current health status of the wrapper:
+  - `HEALTHY` - Wrapper is running normally
+  - `STALLED` - Wrapper has not sent data in expected timeframe
+  - `DEGRADED` - Wrapper is running but experiencing issues
+  - `CRASHED` - Wrapper process has terminated unexpectedly
+  - `UNKNOWN` - Unable to determine wrapper status
+</ResponseField>
+
+<ResponseField name="is_actively_executing" type="boolean">
+  Whether the wrapper is currently running/executing
+</ResponseField>
+
+### Example Request
+
+```bash cURL
+curl -X GET https://api.example.com/resources/wrappers/550e8400-e29b-41d4-a716-446655440000/health \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Example Response (Healthy)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "health_status": "HEALTHY",
+  "is_actively_executing": true
+}
+```
+
+### Example Response (Stopped)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "health_status": "UNKNOWN",
+  "is_actively_executing": false
+}
+```
+
+### Example Response (Stalled)
+
+```json
+{
+  "wrapper_id": "550e8400-e29b-41d4-a716-446655440000",
+  "health_status": "STALLED",
+  "is_actively_executing": true
+}
+```
+
+### Error Responses
+
+<ResponseField name="503 Service Unavailable">
+  Service unavailable checking health:
+  - Connection error to monitoring service
+  - Timeout querying wrapper status
+  
+  ```json
+  {
+    "detail": "Service unavailable"
+  }
+  ```
+</ResponseField>
+
+### Health Status Definitions
+
+**HEALTHY**
+- Wrapper process is running
+- Data is being sent regularly
+- No errors in recent logs
+- All health checks passing
+
+**STALLED**
+- Wrapper process is running
+- No data sent in expected timeframe
+- May indicate data source issues or logic errors
+
+**DEGRADED**
+- Wrapper is running with issues
+- Partial data transmission
+- Some errors in logs but not failing
+
+**CRASHED**
+- Wrapper process terminated unexpectedly
+- Exit code indicates failure
+- Check logs for error details
+
+**UNKNOWN**
+- Unable to determine wrapper status
+- Wrapper may not exist or not yet started
+- Service connectivity issues
+
+### Use Cases
+
+- Monitor wrapper health in dashboards
+- Set up alerts for unhealthy wrappers
+- Verify wrapper is running after execution
+- Troubleshoot data collection issues

@@ -1,0 +1,634 @@
+---
+title: Monitoring Wrapper Health and Status
+description: Monitor wrapper execution, view logs, check health status, and troubleshoot issues
+---
+
+## Overview
+
+The Resource Service provides comprehensive monitoring capabilities for tracking wrapper health, viewing execution logs, and diagnosing issues. This guide covers all monitoring endpoints and best practices.
+
+## Health Status Monitoring
+
+### Check Wrapper Health
+
+Get the current health status of a wrapper:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}/health"
+```
+
+```python Python
+import requests
+
+wrapper_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+response = requests.get(
+    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/health"
+)
+
+health = response.json()
+print(f"Health Status: {health['health_status']}")
+print(f"Active: {health['is_actively_executing']}")
+```
+
+```javascript JavaScript
+const checkHealth = async (wrapperId) => {
+  const response = await fetch(
+    `http://localhost:8000/api/v1/wrappers/${wrapperId}/health`
+  );
+  
+  const health = await response.json();
+  console.log('Health Status:', health.health_status);
+  console.log('Is Executing:', health.is_actively_executing);
+  
+  return health;
+};
+
+await checkHealth('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "health_status": "HEALTHY",
+  "is_actively_executing": true
+}
+```
+
+### Health Status Values
+
+<AccordionGroup>
+  <Accordion title="HEALTHY">
+    **Meaning:** Wrapper process is running normally and sending data as expected.
+    
+    **Action:** No action needed. Continue monitoring periodically.
+    
+    **Characteristics:**
+    - Process is alive and responsive
+    - For API wrappers: Data is being sent regularly
+    - No error logs in recent output
+  </Accordion>
+  
+  <Accordion title="STALLED">
+    **Meaning:** Process is running but hasn't sent data within expected timeframe.
+    
+    **Action:** Check logs for errors. May need to restart the wrapper.
+    
+    **Possible Causes:**
+    - API endpoint is unresponsive
+    - Network connectivity issues
+    - Data source has no new data
+    - Internal logic error
+  </Accordion>
+  
+  <Accordion title="DEGRADED">
+    **Meaning:** Process is running but experiencing intermittent issues.
+    
+    **Action:** Review logs for warnings. Monitor closely for potential failure.
+    
+    **Possible Causes:**
+    - Partial API failures
+    - Rate limiting
+    - Memory pressure
+    - Network instability
+  </Accordion>
+  
+  <Accordion title="CRASHED">
+    **Meaning:** Process has terminated unexpectedly.
+    
+    **Action:** Review crash logs, fix the issue, and restart the wrapper.
+    
+    **Possible Causes:**
+    - Unhandled exception in generated code
+    - API authentication failure
+    - File not found (for file-based wrappers)
+    - Out of memory
+  </Accordion>
+  
+  <Accordion title="UNKNOWN">
+    **Meaning:** Cannot determine process state (usually connectivity issue).
+    
+    **Action:** Check service connectivity. Verify wrapper exists.
+    
+    **Possible Causes:**
+    - Database connection timeout
+    - Service restart in progress
+    - Invalid wrapper ID
+  </Accordion>
+</AccordionGroup>
+
+## Detailed Monitoring Information
+
+Get comprehensive monitoring details:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}/monitoring"
+```
+
+```python Python
+import requests
+from datetime import datetime, timedelta
+
+def monitor_wrapper(wrapper_id):
+    response = requests.get(
+        f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/monitoring"
+    )
+    
+    details = response.json()
+    
+    print(f"Wrapper: {details['wrapper_id']}")
+    print(f"Health: {details['health_status']}")
+    print(f"\nProcess Details:")
+    
+    monitoring = details['monitoring_details']
+    if 'process_id' in monitoring:
+        print(f"  PID: {monitoring['process_id']}")
+        print(f"  Uptime: {monitoring['uptime_seconds']:.1f}s")
+        print(f"  Started: {monitoring['started_at']}")
+        print(f"  Last Check: {monitoring['last_health_check']}")
+        print(f"  Exit Code: {monitoring['exit_code']}")
+    else:
+        print(f"  Status: {monitoring.get('status', 'unknown')}")
+
+monitor_wrapper('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+```
+</CodeGroup>
+
+**Response (Running Wrapper):**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "health_status": "HEALTHY",
+  "monitoring_details": {
+    "process_id": 12345,
+    "exit_code": null,
+    "uptime_seconds": 7245.3,
+    "started_at": "2026-03-03T09:15:30Z",
+    "last_health_check": "2026-03-03T11:16:15Z",
+    "log_files": {
+      "stdout": "/app/wrapper_logs/a1b2c3d4-e5f6-7890-abcd-ef1234567890_stdout.log",
+      "stderr": "/app/wrapper_logs/a1b2c3d4-e5f6-7890-abcd-ef1234567890_stderr.log"
+    }
+  }
+}
+```
+
+**Response (Stopped Wrapper):**
+```json
+{
+  "wrapper_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "health_status": "CRASHED",
+  "monitoring_details": {
+    "status": "not_running"
+  }
+}
+```
+
+<Tip>
+  Use the `uptime_seconds` field to track wrapper stability. Long uptimes indicate reliable execution.
+</Tip>
+
+## Viewing Execution Logs
+
+Access real-time wrapper logs:
+
+<CodeGroup>
+```bash cURL
+# Get last 100 lines (default is 200)
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}/logs?limit=100"
+```
+
+```python Python
+import requests
+
+def get_wrapper_logs(wrapper_id, limit=200):
+    response = requests.get(
+        f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/logs",
+        params={"limit": limit}
+    )
+    
+    result = response.json()
+    print(f"Wrapper: {result['wrapper_id']}")
+    print(f"Total lines: {result['total_lines']}\n")
+    
+    for log_line in result['logs']:
+        print(log_line)
+    
+    return result
+
+# Get recent logs
+get_wrapper_logs('a1b2c3d4-e5f6-7890-abcd-ef1234567890', limit=50)
+```
+
+```javascript JavaScript
+const getWrapperLogs = async (wrapperId, limit = 200) => {
+  const response = await fetch(
+    `http://localhost:8000/api/v1/wrappers/${wrapperId}/logs?limit=${limit}`
+  );
+  
+  const result = await response.json();
+  console.log(`Wrapper: ${result.wrapper_id}`);
+  console.log(`Total lines: ${result.total_lines}\n`);
+  
+  result.logs.forEach(log => console.log(log));
+  
+  return result;
+};
+
+await getWrapperLogs('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 50);
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "logs": [
+    "[STDOUT] Starting wrapper execution for Air Quality Index",
+    "[STDOUT] Phase: historical",
+    "[STDOUT] Fetching data from API: https://api.example.com/v1/air-quality",
+    "[STDOUT] API request successful (200 OK)",
+    "[STDOUT] Retrieved 245 data points",
+    "[STDOUT] Sending data points to RabbitMQ...",
+    "[STDOUT] Successfully sent 245 data points",
+    "[STDOUT] Updated high_water_mark: 2026-03-03T11:00:00Z",
+    "[STDOUT] Updated low_water_mark: 2024-01-01T00:00:00Z",
+    "[STDOUT] Checkpoint saved to database",
+    "[STDOUT] Historical phase complete",
+    "[STDOUT] Transitioning to continuous phase",
+    "[STDOUT] Entering continuous polling mode (poll interval: 300s)",
+    "[STDOUT] Polling for new data since 2026-03-03T11:00:00Z",
+    "[STDOUT] No new data available",
+    "[STDOUT] Sleeping for 300 seconds..."
+  ],
+  "total_lines": 15
+}
+```
+
+### Log Format
+
+- **[STDOUT]** - Normal execution output
+- **[STDERR]** - Error messages and exceptions
+
+<Note>
+  Logs are captured from both stdout and stderr of the wrapper process. The limit parameter returns the most recent N lines.
+</Note>
+
+## Retrieving Wrapper Details
+
+Get complete wrapper information including status and metadata:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/{wrapper_id}"
+```
+
+```python Python
+import requests
+
+def get_wrapper_details(wrapper_id):
+    response = requests.get(
+        f"http://localhost:8000/api/v1/wrappers/{wrapper_id}"
+    )
+    
+    wrapper = response.json()
+    
+    print(f"Wrapper ID: {wrapper['wrapper_id']}")
+    print(f"Resource ID: {wrapper['resource_id']}")
+    print(f"Status: {wrapper['status']}")
+    print(f"Source Type: {wrapper['source_type']}")
+    print(f"\nMetadata:")
+    print(f"  Name: {wrapper['metadata']['name']}")
+    print(f"  Domain: {wrapper['metadata']['domain']}")
+    print(f"  Unit: {wrapper['metadata']['unit']}")
+    print(f"\nExecution:")
+    print(f"  Phase: {wrapper['phase']}")
+    print(f"  Data Points: {wrapper['data_points_count']}")
+    print(f"  Last Data Sent: {wrapper['last_data_sent']}")
+    print(f"  High Water Mark: {wrapper['high_water_mark']}")
+    
+    if wrapper['error_message']:
+        print(f"\nError: {wrapper['error_message']}")
+    
+    return wrapper
+
+get_wrapper_details('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "wrapper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "resource_id": "507f1f77bcf86cd799439011",
+  "metadata": {
+    "name": "Air Quality Index",
+    "domain": "Environment",
+    "subdomain": "Air Quality",
+    "description": "Real-time air quality measurements",
+    "unit": "AQI",
+    "source": "Environmental Monitoring Network",
+    "scale": "Local",
+    "governance_indicator": false,
+    "carrying_capacity": null,
+    "periodicity": "real-time"
+  },
+  "source_type": "API",
+  "source_config": {
+    "location": "https://api.example.com/v1/air-quality",
+    "auth_type": "bearer",
+    "timeout_seconds": 30,
+    "date_field": "timestamp",
+    "value_field": "aqi_value"
+  },
+  "generated_code": "import asyncio\nimport aio_pika\n...",
+  "created_at": "2026-03-03T09:15:00Z",
+  "updated_at": "2026-03-03T11:16:30Z",
+  "completed_at": null,
+  "status": "executing",
+  "error_message": null,
+  "execution_log": [
+    "Started process at 2026-03-03T09:15:30Z",
+    "Historical phase completed at 2026-03-03T09:20:15Z",
+    "Transitioned to continuous phase at 2026-03-03T09:20:16Z"
+  ],
+  "last_health_check": "2026-03-03T11:16:30Z",
+  "last_data_sent": "2026-03-03T11:15:00Z",
+  "data_points_count": 1847,
+  "monitoring_details": {},
+  "phase": "continuous",
+  "high_water_mark": "2026-03-03T11:00:00Z",
+  "low_water_mark": "2024-01-01T00:00:00Z",
+  "execution_result": null
+}
+```
+
+## Listing All Wrappers
+
+Retrieve a list of all wrappers:
+
+<CodeGroup>
+```bash cURL
+curl "http://localhost:8000/api/v1/wrappers/?skip=0&limit=10"
+```
+
+```python Python
+import requests
+
+def list_wrappers(skip=0, limit=10):
+    response = requests.get(
+        "http://localhost:8000/api/v1/wrappers/",
+        params={"skip": skip, "limit": limit}
+    )
+    
+    wrappers = response.json()
+    
+    print(f"Retrieved {len(wrappers)} wrappers:\n")
+    for wrapper in wrappers:
+        print(f"ID: {wrapper['wrapper_id']}")
+        print(f"  Name: {wrapper['metadata']['name']}")
+        print(f"  Status: {wrapper['status']}")
+        print(f"  Type: {wrapper['source_type']}")
+        print(f"  Data Points: {wrapper['data_points_count']}")
+        print()
+    
+    return wrappers
+
+list_wrappers(limit=5)
+```
+</CodeGroup>
+
+<Tip>
+  Use pagination with `skip` and `limit` parameters to efficiently browse large numbers of wrappers.
+</Tip>
+
+## Monitoring Best Practices
+
+### Automated Health Checks
+
+Implement periodic health monitoring:
+
+```python
+import requests
+import time
+from datetime import datetime
+
+def monitor_wrapper_continuously(wrapper_id, interval_seconds=60):
+    """Monitor wrapper health every N seconds"""
+    
+    while True:
+        try:
+            # Check health
+            health_response = requests.get(
+                f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/health"
+            )
+            health = health_response.json()
+            
+            timestamp = datetime.utcnow().isoformat()
+            status = health['health_status']
+            is_active = health['is_actively_executing']
+            
+            print(f"[{timestamp}] {wrapper_id}: {status} (Active: {is_active})")
+            
+            # Alert on unhealthy status
+            if status in ['CRASHED', 'STALLED', 'DEGRADED']:
+                print(f"⚠️  ALERT: Wrapper is {status}")
+                
+                # Get logs for diagnosis
+                logs_response = requests.get(
+                    f"http://localhost:8000/api/v1/wrappers/{wrapper_id}/logs",
+                    params={"limit": 20}
+                )
+                logs = logs_response.json()
+                
+                print("Recent logs:")
+                for log in logs['logs'][-10:]:
+                    print(f"  {log}")
+                
+                # Optionally: send notification, restart wrapper, etc.
+            
+        except Exception as e:
+            print(f"Monitoring error: {e}")
+        
+        time.sleep(interval_seconds)
+
+# Monitor a wrapper every minute
+monitor_wrapper_continuously('a1b2c3d4-e5f6-7890-abcd-ef1234567890', interval_seconds=60)
+```
+
+### Dashboard Monitoring
+
+Create a monitoring dashboard:
+
+```python
+import requests
+from collections import Counter
+
+def get_system_health():
+    """Get overall system health statistics"""
+    
+    # Get all wrappers
+    response = requests.get(
+        "http://localhost:8000/api/v1/wrappers/",
+        params={"skip": 0, "limit": 100}
+    )
+    wrappers = response.json()
+    
+    # Count statuses
+    status_counts = Counter(w['status'] for w in wrappers)
+    source_types = Counter(w['source_type'] for w in wrappers)
+    
+    # Check health of executing wrappers
+    health_checks = []
+    for wrapper in wrappers:
+        if wrapper['status'] == 'executing':
+            health_response = requests.get(
+                f"http://localhost:8000/api/v1/wrappers/{wrapper['wrapper_id']}/health"
+            )
+            health = health_response.json()
+            health_checks.append({
+                'wrapper_id': wrapper['wrapper_id'],
+                'name': wrapper['metadata']['name'],
+                'health': health['health_status'],
+                'active': health['is_actively_executing']
+            })
+    
+    health_counts = Counter(h['health'] for h in health_checks)
+    
+    # Print dashboard
+    print("=" * 60)
+    print("RESOURCE SERVICE MONITORING DASHBOARD")
+    print("=" * 60)
+    print(f"\nTotal Wrappers: {len(wrappers)}")
+    print(f"\nStatus Breakdown:")
+    for status, count in status_counts.most_common():
+        print(f"  {status}: {count}")
+    
+    print(f"\nSource Types:")
+    for source_type, count in source_types.most_common():
+        print(f"  {source_type}: {count}")
+    
+    print(f"\nHealth Status (Executing Wrappers):")
+    for health, count in health_counts.most_common():
+        print(f"  {health}: {count}")
+    
+    print(f"\nUnhealthy Wrappers:")
+    unhealthy = [h for h in health_checks if h['health'] != 'HEALTHY']
+    if unhealthy:
+        for wrapper in unhealthy:
+            print(f"  ⚠️  {wrapper['name']} ({wrapper['wrapper_id']}): {wrapper['health']}")
+    else:
+        print("  ✅ All wrappers healthy")
+    
+    print("=" * 60)
+    
+    return {
+        'total': len(wrappers),
+        'status_counts': status_counts,
+        'source_types': source_types,
+        'health_counts': health_counts,
+        'unhealthy': unhealthy
+    }
+
+# Run dashboard
+get_system_health()
+```
+
+## Troubleshooting Common Issues
+
+<AccordionGroup>
+  <Accordion title="Wrapper keeps crashing">
+    **Diagnosis Steps:**
+    1. Check stderr logs for exception messages
+    2. Verify API credentials are correct (for API wrappers)
+    3. Ensure file still exists (for file wrappers)
+    4. Check for resource limits (memory, disk space)
+    
+    **Common Fixes:**
+    - Update API credentials in source_config
+    - Re-upload missing files
+    - Regenerate wrapper with corrected configuration
+  </Accordion>
+  
+  <Accordion title="Wrapper is stalled">
+    **Diagnosis Steps:**
+    1. Check health status and logs
+    2. Verify API endpoint is accessible
+    3. Check network connectivity
+    4. Review last_data_sent timestamp
+    
+    **Common Fixes:**
+    - API endpoint may be down - contact data provider
+    - Check firewall/network settings
+    - Restart wrapper: stop and re-execute
+  </Accordion>
+  
+  <Accordion title="No data being collected">
+    **Diagnosis Steps:**
+    1. Check wrapper status (should be 'executing')
+    2. Verify is_actively_executing is true
+    3. Review logs for errors
+    4. Check data_points_count (should increase over time)
+    
+    **Common Fixes:**
+    - Ensure wrapper is actually running
+    - Check API returns data in expected format
+    - Verify date_field and value_field are correct
+    - Check RabbitMQ connectivity
+  </Accordion>
+  
+  <Accordion title="Duplicate data points">
+    **Diagnosis Steps:**
+    1. Check high_water_mark is updating correctly
+    2. Review checkpoint behavior in logs
+    3. Verify phase transitions
+    
+    **Common Fixes:**
+    - Ensure checkpointing is working (check database updates)
+    - For API wrappers, verify date filtering logic
+    - May need to regenerate wrapper with improved logic
+  </Accordion>
+</AccordionGroup>
+
+## Monitoring Metrics to Track
+
+<CardGroup cols={2}>
+  <Card title="Uptime" icon="clock">
+    Track `uptime_seconds` to measure wrapper stability and reliability.
+  </Card>
+  
+  <Card title="Data Volume" icon="database">
+    Monitor `data_points_count` to ensure continuous data collection.
+  </Card>
+  
+  <Card title="Last Activity" icon="calendar">
+    Watch `last_data_sent` to detect stalled wrappers quickly.
+  </Card>
+  
+  <Card title="Health Trends" icon="chart-line">
+    Log health status over time to identify patterns and issues.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Wrapper Execution" icon="play" href="/guides/wrapper-execution">
+    Learn about wrapper execution modes and lifecycle
+  </Card>
+  
+  <Card title="Creating Resources" icon="folder-plus" href="/guides/creating-resources">
+    Create and manage resources for wrappers
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/wrappers/health">
+    View complete monitoring API documentation
+  </Card>
+  
+  <Card title="Generating Wrappers" icon="wand-magic-sparkles" href="/guides/generating-wrappers">
+    Generate new wrappers from data sources
+  </Card>
+</CardGroup>
