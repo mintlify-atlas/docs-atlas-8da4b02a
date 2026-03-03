@@ -1,0 +1,47 @@
+---
+title: Get service version
+description: Retrieve the service name and version number
+---
+
+## GET /resources/version
+
+Returns the service name and current version number. This endpoint is useful for health checks and version verification.
+
+### Response
+
+<ResponseField name="service" type="string" required>
+  The service name identifier
+</ResponseField>
+
+<ResponseField name="version" type="string" required>
+  The current version number of the service
+</ResponseField>
+
+### Example Request
+
+```bash
+curl http://localhost:8080/resources/version
+```
+
+### Example Response
+
+```json
+{
+  "service": "resource-service",
+  "version": "1.0.0"
+}
+```
+
+### Use Cases
+
+<Accordion title="Version verification">
+  Verify the deployed service version matches your expected version
+</Accordion>
+
+<Accordion title="Health monitoring">
+  Use as a lightweight endpoint to confirm the service is running and responding
+</Accordion>
+
+<Accordion title="API compatibility">
+  Check version compatibility before making API calls
+</Accordion>

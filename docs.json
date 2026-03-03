@@ -70,7 +70,8 @@
               "api/resources/get",
               "api/resources/create",
               "api/resources/update",
-              "api/resources/delete"
+              "api/resources/delete",
+              "api/resources/version"
             ]
           },
           {
