@@ -1,0 +1,127 @@
+{
+  "projectType": "api-service",
+  "projectName": "Resource Service",
+  "projectDescription": "AI-powered microservice for managing sustainability indicator resources with automated wrapper generation from multiple data sources.",
+  "theme": "aspen",
+  "primaryColor": "#2E7D32",
+  "lightColor": "#66BB6A",
+  "darkColor": "#1B5E20",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/resources",
+              "concepts/wrappers",
+              "concepts/data-sources"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/creating-resources",
+              "guides/generating-wrappers",
+              "guides/file-upload",
+              "guides/wrapper-execution",
+              "guides/monitoring"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/configuration",
+              "deployment/environment-variables"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Resources",
+            "pages": [
+              "api/resources/list",
+              "api/resources/get",
+              "api/resources/create",
+              "api/resources/update",
+              "api/resources/delete"
+            ]
+          },
+          {
+            "group": "Wrappers",
+            "pages": [
+              "api/wrappers/generate",
+              "api/wrappers/execute",
+              "api/wrappers/list",
+              "api/wrappers/get",
+              "api/wrappers/stop",
+              "api/wrappers/health",
+              "api/wrappers/logs",
+              "api/wrappers/monitoring"
+            ]
+          },
+          {
+            "group": "File Management",
+            "pages": [
+              "api/files/upload",
+              "api/files/get",
+              "api/files/delete",
+              "api/files/list"
+            ]
+          },
+          {
+            "group": "Health",
+            "pages": [
+              "api/health"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "AI-powered wrapper generation using Google Gemini",
+    "Multi-source data integration (API, CSV, XLSX)",
+    "Resource lifecycle management with MongoDB",
+    "Automated wrapper execution and monitoring",
+    "File upload and validation for CSV/XLSX sources",
+    "RabbitMQ message queue integration",
+    "Historical and continuous data collection modes",
+    "Health monitoring and logging"
+  ],
+  "publicApiSurface": [
+    "GET /resources",
+    "GET /resources/{resource_id}",
+    "POST /resources",
+    "PUT /resources/{resource_id}",
+    "PATCH /resources/{resource_id}",
+    "DELETE /resources/{resource_id}",
+    "POST /resources/wrappers/generate",
+    "POST /resources/wrappers/{wrapper_id}/execute",
+    "GET /resources/wrappers",
+    "GET /resources/wrappers/{wrapper_id}",
+    "POST /resources/wrappers/{wrapper_id}/stop",
+    "GET /resources/wrappers/{wrapper_id}/health",
+    "GET /resources/wrappers/{wrapper_id}/logs",
+    "GET /resources/wrappers/{wrapper_id}/monitoring",
+    "POST /resources/wrappers/files/upload",
+    "GET /resources/wrappers/files/{file_id}",
+    "DELETE /resources/wrappers/files/{file_id}",
+    "GET /resources/wrappers/files",
+    "GET /health"
+  ]
+}
